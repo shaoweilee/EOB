@@ -23,6 +23,12 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	class USpringArmComponent* CameraBoom;
 
+
+	/** 防卡肉定时器 */
+	FTimerHandle GhostWalkSafeTimerHandle;
+	/** 检查是否可以安全地恢复实体碰撞 */
+	void TryRestoreSolidCollision();
+
 public:
 	/** Constructor */
 	AEmpireOfBossCharacter();
@@ -38,4 +44,25 @@ public:
 
 	/** Returns the Camera Boom component **/
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
+
+	UPROPERTY(VisibleAnywhere)
+	AActor* CurrentTarget;
+
+	UPROPERTY(VisibleAnywhere)
+	bool bIsTryingToAttack = false;
+	// 攻击检测逻辑
+	void CheckAttackRangeAndExecute();
+
+	void PerformMeleeAttack();
+
+	// 暴露给蓝图，让动画蓝图能够呼叫它
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	void ApplyFanDamage();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
+	UAnimMontage* AttackMontage; // 在蓝图中配置你的普攻动画蒙太奇
+
+	/** 开启/关闭穿怪状态 */
+	UFUNCTION(BlueprintCallable, Category = "EOB|Combat")
+	void SetGhostWalkEnabled(bool bEnabled);
 };

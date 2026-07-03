@@ -62,7 +62,7 @@ void UInteractableComponent::OnOwnerClicked(UPrimitiveComponent* TouchedComponen
 		AEmpireOfBossPlayerController* EOB_PC = Cast<AEmpireOfBossPlayerController>(PC);
 		if (EOB_PC)
 		{
-			UAIBlueprintHelperLibrary::SimpleMoveToLocation(EOB_PC, GetOwner()->GetActorLocation());
+			UAIBlueprintHelperLibrary::SimpleMoveToActor(EOB_PC, GetOwner());
 		}
 
 		UE_LOG(LogTemp, Warning, TEXT("[%s] 离你太远了，正在自动寻路走过去..."), *GetOwner()->GetName());

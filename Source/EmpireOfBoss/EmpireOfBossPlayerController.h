@@ -93,4 +93,6 @@ protected:
 
 	// 🌟 属性改变时的 C++ 回调函数
 	void OnPlayerHealthChanged(const struct FOnAttributeChangeData& Data);
+	
+	AActor* GetTargetUnderCursor();
 };

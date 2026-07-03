@@ -110,6 +110,23 @@ void AEmpireOfBossPlayerController::SetupInputComponent()
 
 void AEmpireOfBossPlayerController::OnInputStarted()
 {
+	// 1. 先检测是否点到了敌人
+	AActor* EnemyTarget = GetTargetUnderCursor();
+
+	if (EnemyTarget)
+	{
+		// 标记为攻击意图
+		MyHero->CurrentTarget = EnemyTarget;
+		MyHero->bIsTryingToAttack = true;
+
+		// 可选：在这里播放一个点击目标的特效
+		return;
+	}
+
+	// 2. 如果没点到敌人，清空攻击意图，执行原有逻辑
+	MyHero->bIsTryingToAttack = false;
+	MyHero->CurrentTarget = nullptr;
+
 	RotateCharacterToCursor();
 	StopMovement();
 }
@@ -253,4 +270,17 @@ void AEmpireOfBossPlayerController::OnPlayerHealthChanged(const FOnAttributeChan
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("[UI 联动管道]: 检测到玩家血量发生改变！当前最新血量为: %.1f"), CurrentHealth);
+}
+
+AActor* AEmpireOfBossPlayerController::GetTargetUnderCursor()
+{
+	FHitResult Hit;
+	if (GetHitResultUnderCursor(ECC_Visibility, false, Hit))
+	{
+		if (Hit.GetActor() && Hit.GetActor()->ActorHasTag("Enemy"))
+		{
+			return Hit.GetActor();
+		}
+	}
+	return nullptr;
 }
