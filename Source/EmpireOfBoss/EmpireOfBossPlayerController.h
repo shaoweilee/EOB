@@ -47,9 +47,6 @@ protected:
 	/** True if the controlled character should navigate to the mouse cursor. */
 	uint32 bMoveToMouseCursor : 1;
 
-	/** Saved location of the character movement destination */
-	UPROPERTY(VisibleAnywhere)
-	FVector CachedDestination;
 
 	/** Time that the click input has been pressed */
 	float FollowTime = 0.0f;
@@ -65,6 +62,10 @@ public:
 	AEmpireOfBossCharacter* MyHero;
 	UCharacterMovementComponent* MoveComp;
 	UAbilitySystemComponent* UABC;
+	
+	/** Saved location of the character movement destination */
+	UPROPERTY(VisibleAnywhere)
+	FVector CachedDestination;
 
 	UPROPERTY(BlueprintReadWrite, Category = "EOB|UI")
 	class UEOB_HUDWidget* EOBHUDWidget;
@@ -93,6 +94,6 @@ protected:
 
 	// 🌟 属性改变时的 C++ 回调函数
 	void OnPlayerHealthChanged(const struct FOnAttributeChangeData& Data);
-	
+
 	AActor* GetTargetUnderCursor();
 };

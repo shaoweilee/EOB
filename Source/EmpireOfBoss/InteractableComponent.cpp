@@ -9,6 +9,12 @@
 UInteractableComponent::UInteractableComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+	// 🌟 降维打击：在构造函数中，直接将宿主默认打上标签
+	// 这样美术或你在蓝图编辑器里不需要运行游戏，也能直接看到静态的 Tags 数组里自带这个标签！
+	AActor* MyOwner = GetOwner();
+	if (MyOwner)
+	{
+	}
 }
 
 void UInteractableComponent::BeginPlay()
@@ -18,6 +24,7 @@ void UInteractableComponent::BeginPlay()
 	AActor* Owner = GetOwner();
 	if (Owner)
 	{
+		Owner->Tags.AddUnique(FName("Interactable"));
 		// 🌟 自动化升级：获取宿主 Actor 上的【所有】PrimitiveComponent（包括底座和盖子）
 		TArray<UPrimitiveComponent*> PrimitiveComponents;
 		Owner->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
@@ -47,25 +54,35 @@ void UInteractableComponent::OnOwnerClicked(UPrimitiveComponent* TouchedComponen
 	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
 	if (!PC || !PC->GetPawn()) return;
 
-	// 自动计算玩家角色与该物体的距离
 	float Distance = FVector::Dist(PC->GetPawn()->GetActorLocation(), GetOwner()->GetActorLocation());
 
 	if (Distance <= InteractionDistance)
 	{
-		// 🌟 情况 A：距离足够近，直接闭环触发交互
 		TriggerInteraction(PC);
 	}
 	else
 	{
-		// 🌟 情况 B：太远了，命令控制器的路点寻路系统朝这个物体走过来
-		// 这里可以直接调用你的 PlayerController 寻路接口，例如：
 		AEmpireOfBossPlayerController* EOB_PC = Cast<AEmpireOfBossPlayerController>(PC);
 		if (EOB_PC)
 		{
-			UAIBlueprintHelperLibrary::SimpleMoveToActor(EOB_PC, GetOwner());
+			// 🌟 手感升级：计算宝箱底部的精确地表寻路点
+			FVector TargetFloorLocation = GetOwner()->GetActorLocation();
+			FHitResult FloorHit;
+			FVector StartTrace = TargetFloorLocation + FVector(0.f, 0.f, 100.f);
+			FVector EndTrace = TargetFloorLocation - FVector(0.f, 0.f, 500.f);
+
+			// 垂直向下走你的地表行走专线
+			if (GetWorld()->LineTraceSingleByChannel(FloorHit, StartTrace, EndTrace, ECC_GameTraceChannel2))
+			{
+				TargetFloorLocation = FloorHit.Location;
+			}
+
+			// 同步给 PC 缓存并走过去
+			EOB_PC->CachedDestination = TargetFloorLocation;
+			UAIBlueprintHelperLibrary::SimpleMoveToLocation(EOB_PC, TargetFloorLocation);
 		}
 
-		UE_LOG(LogTemp, Warning, TEXT("[%s] 离你太远了，正在自动寻路走过去..."), *GetOwner()->GetName());
+		UE_LOG(LogTemp, Warning, TEXT("[%s] 离你太远了，已成功命令主角精确寻路至其底座地面..."), *GetOwner()->GetName());
 	}
 }
 

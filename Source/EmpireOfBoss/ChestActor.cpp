@@ -21,6 +21,7 @@ AChestActor::AChestActor()
 void AChestActor::BeginPlay()
 {
 	Super::BeginPlay();
+	Tags.AddUnique(FName("Chest"));
 
 	// 🌟 性能大招：虽然开启了 bCanEverTick，但游戏一上来先让它的 Tick 彻底沉睡
 	// 这样在没开箱之前，成百上千个箱子完全不占一点 CPU 性能！

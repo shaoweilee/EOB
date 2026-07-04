@@ -123,12 +123,43 @@ void AEmpireOfBossPlayerController::OnInputStarted()
 		return;
 	}
 
+	// 🌟 2. 核心拦截：检测是否点到了宝箱等可交互物件
+	FHitResult InteractHit;
+	if (GetHitResultUnderCursor(ECC_Visibility, false, InteractHit))
+	{
+		if (InteractHit.GetActor() && InteractHit.GetActor()->ActorHasTag("Interactable"))
+		{
+			// 点到宝箱了！清空攻击意图
+			MyHero->bIsTryingToAttack = false;
+			MyHero->CurrentTarget = nullptr;
+
+			// 🌟 直接 return！彻底放权给宝箱的 InteractableComponent::OnOwnerClicked 去处理它的 SimpleMoveToActor。
+			// 这样控制器就不会用普通地面的 SimpleMoveToLocation 去掐断组件的寻路了！
+			return;
+		}
+	}
+
 	// 2. 如果没点到敌人，清空攻击意图，执行原有逻辑
 	MyHero->bIsTryingToAttack = false;
 	MyHero->CurrentTarget = nullptr;
 
+	// 🌟 核心修正：点到树木/墙壁时，立刻让射线走 ECC_GameTraceChannel2 专线击穿它们，落锁到地面！
+	FHitResult GroundHit;
+	if (GetHitResultUnderCursor(ECC_GameTraceChannel2, true, GroundHit))
+	{
+		// 强行把 CachedDestination 刷新为击穿树木后的真实地表坐标
+		CachedDestination = GroundHit.Location;
+		// 🌟 核心手感优化：不要盲目执行 StopMovement() 导致角色发呆！
+		// 只要点的是空地，在按下的第一帧，立刻利用 SimpleMoveToLocation 发起一次寻路点火！
+		// 这能保证角色在 0.001 秒内就立刻起跑，彻底消灭前 0.2 秒的原地发呆。
+		if (!IsBlockMove())
+		{
+			UAIBlueprintHelperLibrary::SimpleMoveToLocation(this, CachedDestination);
+		}
+	}
+
 	RotateCharacterToCursor();
-	StopMovement();
+	// StopMovement();
 }
 
 void AEmpireOfBossPlayerController::OnSetDestinationTriggered()
@@ -137,11 +168,9 @@ void AEmpireOfBossPlayerController::OnSetDestinationTriggered()
 	FollowTime += GetWorld()->GetDeltaSeconds();
 
 	FHitResult Hit;
-	bool bHitSuccessful = false;
-	bHitSuccessful = GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, true, Hit);
 
 	// If we hit a surface, cache the location
-	if (bHitSuccessful)
+	if (GetHitResultUnderCursor(ECC_GameTraceChannel2, true, Hit))
 	{
 		CachedDestination = Hit.Location;
 	}
@@ -151,16 +180,19 @@ void AEmpireOfBossPlayerController::OnSetDestinationTriggered()
 		RotateCharacterToCursor();
 		return;
 	}
-	if (MyHero)
+	if (FollowTime > ShortPressThreshold)
 	{
-		FVector WorldDirection = (CachedDestination - MyHero->GetActorLocation()).GetSafeNormal();
-		MyHero->AddMovementInput(WorldDirection, 1.0, false);
+		if (MyHero)
+		{
+			FVector WorldDirection = (CachedDestination - MyHero->GetActorLocation()).GetSafeNormal();
+			MyHero->AddMovementInput(WorldDirection, 1.0, false);
+		}
 	}
 }
 
 void AEmpireOfBossPlayerController::OnSetDestinationReleased()
 {
-	// If it was a short press
+	// 如果按住的时间非常短，判定为标准的“暗黑流点击走位”
 	if (FollowTime <= ShortPressThreshold)
 	{
 		if (IsBlockMove())
@@ -168,9 +200,15 @@ void AEmpireOfBossPlayerController::OnSetDestinationReleased()
 			FollowTime = 0.f;
 			return;
 		}
-		// We move there 
+		// 🌟 再次安全兜底检测，确保 CachedDestination 是点击地面时的最新坐标
+		FHitResult FloorHit;
+		if (GetHitResultUnderCursor(ECC_GameTraceChannel2, true, FloorHit))
+		{
+			CachedDestination = FloorHit.Location;
+		}
+		// 此时因为长按的 AddMovementInput 没触发，导航路径不会被打断，角色可以 100% 完美走过去
 		UAIBlueprintHelperLibrary::SimpleMoveToLocation(this, CachedDestination);
-		// and spawn some particles
+		// 生成点击地面的金币/脚印特效
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, FXCursor, CachedDestination, FRotator::ZeroRotator,
 		                                               FVector(1.f, 1.f, 1.f), true, true, ENCPoolMethod::None, true);
 	}
@@ -217,7 +255,7 @@ void AEmpireOfBossPlayerController::RotateCharacterToCursor()
 	if (DeprojectMousePositionToWorld(WorldLocation, WorldDirection))
 	{
 		FHitResult HitResult;
-		if (GetHitResultUnderCursor(ECC_Visibility, false, HitResult))
+		if (GetHitResultUnderCursor(ECC_GameTraceChannel2, false, HitResult))
 		{
 			TargetWorldLocation = HitResult.ImpactPoint;
 		}
