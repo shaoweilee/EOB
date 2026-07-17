@@ -75,22 +75,37 @@ void AEmpireOfBossCharacter::Tick(float DeltaSeconds)
 void AEmpireOfBossCharacter::SetGhostWalkEnabled(bool bEnabled)
 {
 	UCapsuleComponent* MyCapsule = GetCapsuleComponent();
-	if (!MyCapsule) return;
-
-	if (bEnabled)
+	if (!MyCapsule)
 	{
-		// 1. 技能开始：清除可能正在排队的恢复定时器
-		GetWorldTimerManager().ClearTimer(GhostWalkSafeTimerHandle);
+		return;
+	}
 
-		// 2. 动态改写碰撞矩阵：将自己对普通怪物(Pawn通道)的响应从 Block 降级为 Overlap
-		MyCapsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-		UE_LOG(LogTemp, Log, TEXT("[穿怪系统]: 技能启动，主角进入幽灵虚化状态！"));
-	}
-	else
-	{
-		// 3. 技能结束：不直接变回 Block，而是进入安全检查
-		TryRestoreSolidCollision();
-	}
+	// =====================================================================
+	// 🌟 核心设计：动态修改碰撞矩阵对敌人（Enemy）通道的响应
+	// 
+	// 1. 如果 bEnabled 为 true（开启幽灵步）：
+	//    将 Capsule 对 Enemy 通道响应设为 ECR_Ignore（忽略），主角能直接穿怪。
+	//
+	// 2. 如果 bEnabled 为 false（关闭幽灵步）：
+	//    将 Capsule 对 Enemy 通道响应设为 ECR_Block（阻挡），主角恢复实体碰撞，不再重叠。
+	// =====================================================================
+
+	// 假设 ECC_GameTraceChannel1 是你在项目设置中创建的自定义对象通道 "Enemy"
+	// 注意：你需要在引擎 Project Settings -> Collision -> Object Channels 中创建 "Enemy"
+	ECollisionChannel EnemyChannel = ECC_GameTraceChannel4;
+
+	// 根据开关状态选择对应的碰撞响应
+	ECollisionResponse NewResponse = bEnabled ? ECR_Ignore : ECR_Block;
+
+	// 动态应用响应
+	MyCapsule->SetCollisionResponseToChannel(EnemyChannel, NewResponse);
+
+	// 辅助调试日志（开发完毕后可注释掉）
+	UE_LOG(LogTemp, Log, TEXT("[%s] 幽灵步状态更新: %s, 对敌人碰撞响应设置为: %s"),
+	       *GetName(),
+	       bEnabled ? TEXT("开启") : TEXT("关闭"),
+	       bEnabled ? TEXT("Ignore (忽略)") : TEXT("Block (阻挡)")
+	);
 }
 
 void AEmpireOfBossCharacter::TryRestoreSolidCollision()

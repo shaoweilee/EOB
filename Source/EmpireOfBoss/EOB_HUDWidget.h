@@ -23,4 +23,8 @@ public: /** 🌟 C++ 核心事件：当血量或蓝量改变时，C++ 呼叫这�
 	void VM_UpdateHPVisual(float HealthPercent);
 	UFUNCTION(BlueprintImplementableEvent, Category = "EOB|UI")
 	void VM_UpdateMPVisual(float ManaPercent);
+
+	// 敌人血条
+	UFUNCTION(BlueprintImplementableEvent)
+	void ShowStateBar(ESlateVisibility IsShow);
 };

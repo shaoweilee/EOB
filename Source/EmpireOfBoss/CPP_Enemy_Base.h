@@ -3,11 +3,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Character.h" // 🌟 关键：引入 Character 头文件
+#include "EOPBaseCharacter.h"
 #include "CPP_Enemy_Base.generated.h"
 
 UCLASS()
-class EMPIREOFBOSS_API ACPP_Enemy_Base : public ACharacter
+class EMPIREOFBOSS_API ACPP_Enemy_Base : public AEOPBaseCharacter
 {
 	GENERATED_BODY()
 

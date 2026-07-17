@@ -1,4 +1,7 @@
 #include "CPP_Enemy_Base.h"
+
+#include "AbilitySystemComponent.h"
+#include "EOB_AttributeSet.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
@@ -21,6 +24,7 @@ ACPP_Enemy_Base::ACPP_Enemy_Base()
 void ACPP_Enemy_Base::BeginPlay()
 {
 	Super::BeginPlay();
+	InitializeDefaultAttributes();
 	// 放在 BeginPlay 里，游戏跑起来的瞬间会强行洗掉蓝图的一切垃圾缓存
 	if (UCapsuleComponent* CapCollision = GetCapsuleComponent())
 	{
@@ -40,5 +44,11 @@ void ACPP_Enemy_Base::Tick(float DeltaTime)
 void ACPP_Enemy_Base::OnDamageTaken(AActor* DamagedActor, float Damage, const class UDamageType* DamageType,
                                     class AController* InstigatedBy, AActor* DamageCauser)
 {
-	UE_LOG(LogTemp, Warning, TEXT("---%f---"), Damage);
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		bool bFound = false;
+		// 获取当前血量并打印
+		float CurrentHP = ASC->GetNumericAttribute(UEOB_AttributeSet::GetHealthAttribute());
+		UE_LOG(LogTemp, Warning, TEXT("怪物当前血量是: %f"), CurrentHP);
+	}
 }

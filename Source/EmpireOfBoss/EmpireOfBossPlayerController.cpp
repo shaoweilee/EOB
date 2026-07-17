@@ -312,13 +312,52 @@ void AEmpireOfBossPlayerController::OnPlayerHealthChanged(const FOnAttributeChan
 
 AActor* AEmpireOfBossPlayerController::GetTargetUnderCursor()
 {
-	FHitResult Hit;
-	if (GetHitResultUnderCursor(ECC_Visibility, false, Hit))
+	FHitResult HitResult;
+	// 假设 ECC_GameTraceChannel2 是你的 Enemy_Trace 通道
+	if (GetHitResultUnderCursorByChannel(UEngineTypes::ConvertToTraceType(ECC_GameTraceChannel4), true, HitResult))
 	{
-		if (Hit.GetActor() && Hit.GetActor()->ActorHasTag("Enemy"))
-		{
-			return Hit.GetActor();
-		}
+		return HitResult.GetActor(); // 只要有返回，百分之百是敌人
 	}
 	return nullptr;
+}
+
+void AEmpireOfBossPlayerController::PlayerTick(float DeltaTime)
+{
+	Super::PlayerTick(DeltaTime);
+
+	// 🌟 每帧执行敌人悬停检测
+	CheckEnemyHoverUnderCursor();
+}
+
+void AEmpireOfBossPlayerController::CheckEnemyHoverUnderCursor()
+{
+	// 如果 UI 还没有被 Subsystem 创建出来，直接返回安全过滤
+	if (!EOBHUDWidget) return;
+	// 检查鼠标下方物体是否是有效敌人（你的 CPP_Enemy_Base 已经自带了 Enemy 这个 Tag）
+	if (AActor* CurrentHoveredActor = GetTargetUnderCursor())
+	{
+		// 🌟 性能优化闭环：如果当前指的敌人和上一帧是同一个，不需要重复刷 UI
+		if (LastHoveredEnemy != CurrentHoveredActor)
+		{
+			LastHoveredEnemy = CurrentHoveredActor;
+
+			// 🌟 呼叫你在 EOB_HUDWidget.h 中写的蓝图事件，显示血条
+			EOBHUDWidget->ShowStateBar(ESlateVisibility::Visible);
+
+			// 💡 进阶：如果你以后想把这个敌人的名字或者精准血量百分比传给 UI 控件，
+			// 可以在这里获取 CurrentHoveredActor 的 AttributeSet，再传进 UI 刷新
+		}
+	}
+	else
+	{
+		// 如果鼠标下方不是敌人（指到了空地、或者指到了宝箱 ChestActor）
+		if (LastHoveredEnemy.IsValid())
+		{
+			// 清空缓存
+			LastHoveredEnemy = nullptr;
+
+			// 🌟 呼叫蓝图事件，隐藏血条
+			EOBHUDWidget->ShowStateBar(ESlateVisibility::Collapsed); // 或者 ESlateVisibility::Hidden
+		}
+	}
 }

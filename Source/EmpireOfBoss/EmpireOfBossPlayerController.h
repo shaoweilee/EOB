@@ -56,13 +56,14 @@ public:
 	AEmpireOfBossPlayerController();
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
+	virtual void PlayerTick(float DeltaTime) override;
 
 	// ✅ 全局唯一入口
 	UPROPERTY(VisibleAnywhere)
 	AEmpireOfBossCharacter* MyHero;
 	UCharacterMovementComponent* MoveComp;
 	UAbilitySystemComponent* UABC;
-	
+
 	/** Saved location of the character movement destination */
 	UPROPERTY(VisibleAnywhere)
 	FVector CachedDestination;
@@ -76,6 +77,13 @@ public:
 	FRotator DynamicTargetRotation;
 	// 2. 将定时器句柄作为类成员变量，彻底解决 Lambda 捕获的生命周期问题
 	FTimerHandle SmoothRotateTimerHandle;
+
+	// 🌟 核心性能优化：缓存上一次射线扫到的敌人指针，避免每帧高频重复调用 UI 逻辑
+	UPROPERTY()
+	TWeakObjectPtr<AActor> LastHoveredEnemy;
+
+	// 🌟 辅助函数：负责每帧检测并切换血条显示状态
+	void CheckEnemyHoverUnderCursor();
 
 protected:
 	/** Initialize input bindings */
