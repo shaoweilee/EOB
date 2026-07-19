@@ -14,6 +14,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "Engine/OverlapResult.h"
 #include "TimerManager.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
+#include "MyGameplayTagsLibrary.h"
 
 AEmpireOfBossCharacter::AEmpireOfBossCharacter()
 {
@@ -215,7 +218,35 @@ void AEmpireOfBossCharacter::ApplyFanDamage()
 			{
 				// 造成 2-3 点伤害
 				float Damage = FMath::RandRange(2.f, 3.f);
-				UGameplayStatics::ApplyDamage(HitActor, Damage, GetController(), this, UDamageType::StaticClass());
+				// 1. 安全地获取主角自己和击中怪物的 GAS 组件
+				UAbilitySystemComponent* MyASC = GetAbilitySystemComponent();
+				// 💡 UAbilitySystemGlobals 可以极其安全地从任何 Actor 身上拔出它的 ASC，不管它是谁！
+				UAbilitySystemComponent* TargetASC =
+					UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HitActor);
+
+				// 确保双方都有 GAS 系统，且你在蓝图里配好了 DamageEffectClass
+				if (MyASC && TargetASC && DamageEffectClass)
+				{
+					// 2. 创建上下文：记录“这一刀是谁砍的”，方便以后做击杀回血、吸血等机制
+					FGameplayEffectContextHandle ContextHandle = MyASC->MakeEffectContext();
+					ContextHandle.AddInstigator(this, this);
+
+					// 3. 打包伤害请求 (Spec)
+					FGameplayEffectSpecHandle SpecHandle = MyASC->MakeOutgoingSpec(
+						DamageEffectClass, 1.f, ContextHandle);
+
+					if (SpecHandle.IsValid())
+					{
+						// 🌟 4. 将你 C++ 里随机出来的 2~3 点伤害，塞进 SetByCaller 里！
+						SpecHandle.Data.Get()->SetSetByCallerMagnitude(FMyGameplayTags::Data_Damage, Damage);
+
+						// 5. 狠狠地灌进怪物的 GAS 系统！
+						MyASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
+
+						UE_LOG(LogTemp, Warning, TEXT("⚔️ 成功向怪物 [%s] 的伤害池灌入 %.1f 点随机伤害！"), *HitActor->GetName(),
+						       Damage);
+					}
+				}
 			}
 		}
 	}

@@ -33,7 +33,6 @@ void ACPP_Enemy_Base::BeginPlay()
 
 		UE_LOG(LogTemp, Log, TEXT("[碰撞强刷]: 成功在 BeginPlay 中强行应用 EnemyCapsule 预设！"));
 	}
-	OnTakeAnyDamage.AddDynamic(this, &ACPP_Enemy_Base::OnDamageTaken);
 }
 
 void ACPP_Enemy_Base::Tick(float DeltaTime)
@@ -41,14 +40,3 @@ void ACPP_Enemy_Base::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 }
 
-void ACPP_Enemy_Base::OnDamageTaken(AActor* DamagedActor, float Damage, const class UDamageType* DamageType,
-                                    class AController* InstigatedBy, AActor* DamageCauser)
-{
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
-	{
-		bool bFound = false;
-		// 获取当前血量并打印
-		float CurrentHP = ASC->GetNumericAttribute(UEOB_AttributeSet::GetHealthAttribute());
-		UE_LOG(LogTemp, Warning, TEXT("怪物当前血量是: %f"), CurrentHP);
-	}
-}

@@ -20,6 +20,7 @@ public:
 	static FGameplayTag State_Rooted;
 	static FGameplayTag State_Restricted_KnockedBack;
 	static FGameplayTag Ability_Type_CCBreak;
+	static FGameplayTag Data_Damage;
 };
 
 UCLASS()

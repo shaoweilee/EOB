@@ -62,6 +62,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
 	UAnimMontage* AttackMontage; // 在蓝图中配置你的普攻动画蒙太奇
 
+	// 🌟 在蓝图中把你刚才建好的 GE_Damage 拖到这个槽位里！
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
+	TSubclassOf<class UGameplayEffect> DamageEffectClass;
+
 	/** 开启/关闭穿怪状态 */
 	UFUNCTION(BlueprintCallable, Category = "EOB|Combat")
 	void SetGhostWalkEnabled(bool bEnabled);
