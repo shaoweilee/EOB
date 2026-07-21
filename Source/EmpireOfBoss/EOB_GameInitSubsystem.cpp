@@ -11,15 +11,7 @@ void UEOB_GameInitSubsystem::OrchestratePlayerInitialization(AEmpireOfBossPlayer
 	if (!PC) return;
 
 	// ======= 步骤1：角色空间传送，保证位置先到位 =======
-	// AEOPBaseCharacter* MyHero = Cast<AEOPBaseCharacter>(PC->GetPawn());
-	// 兼容你PC里已经缓存的MyHero指针
-	// if (!MyHero && PC->MyHero)
-	// {
-	// 	MyHero = Cast<AEOPBaseCharacter>(PC->MyHero);
-	// }
 
-	// if (MyHero)
-	// {
 	// 传送式设置位置，避免物理碰撞干扰
 	PC->MyHero->SetActorLocationAndRotation(SpawnLocation, SpawnRotation, false, nullptr,
 	                                        ETeleportType::TeleportPhysics);
@@ -27,12 +19,6 @@ void UEOB_GameInitSubsystem::OrchestratePlayerInitialization(AEmpireOfBossPlayer
 	// ======= 步骤2：显式触发GAS属性初始化 =======
 	// 注意：这里会把EOPBaseCharacter里的自动初始化去掉，避免重复应用
 	PC->MyHero->InitializeDefaultAttributes();
-
-	// 把ASC指针同步给PC（兼容你PC里的UABC成员，避免PC里二次获取）
-	// PC->UABC = MyHero->GetAbilitySystemComponent();
-	// PC->MyHero = Cast<AEmpireOfBossCharacter>(MyHero);
-	// PC->MoveComp = MyHero->GetCharacterMovement();
-	// }
 
 	// ======= 步骤3：统一构建UI + 首帧强刷血蓝条 =======
 	AEmpireOfBossHUD* EOBHUD = Cast<AEmpireOfBossHUD>(PC->GetHUD());
@@ -45,9 +31,9 @@ void UEOB_GameInitSubsystem::OrchestratePlayerInitialization(AEmpireOfBossPlayer
 		// 把UI实例同步给PC，方便PC里的属性变化回调直接调用
 		PC->EOBHUDWidget = HUDWidget;
 
-		if (HUDWidget && PC->MyHero && PC->MyHero->GetEOBAttributeSet())
+		if (HUDWidget && PC->MyHero && PC->MyHero->AttributeSet)
 		{
-			const UEOB_AttributeSet* AttribSet = PC->MyHero->GetEOBAttributeSet();
+			const UEOB_AttributeSet* AttribSet = PC->MyHero->AttributeSet;
 
 			// 属性已100%初始化完成，计算首帧精确比例，杜绝0值闪烁
 			float HPPercent = (AttribSet->GetMaxHealth() > 0.f)

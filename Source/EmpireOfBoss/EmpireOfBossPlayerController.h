@@ -62,7 +62,6 @@ public:
 	UPROPERTY(VisibleAnywhere)
 	AEmpireOfBossCharacter* MyHero;
 	UCharacterMovementComponent* MoveComp;
-	UAbilitySystemComponent* UABC;
 
 	/** Saved location of the character movement destination */
 	UPROPERTY(VisibleAnywhere)

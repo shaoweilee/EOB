@@ -5,11 +5,9 @@
 #include "AbilitySystemComponent.h"
 #include "GameFramework/Pawn.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
-#include "NiagaraSystem.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Engine/World.h"
 #include "EnhancedInputComponent.h"
-#include "InputActionValue.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 #include "EmpireOfBoss.h"
@@ -40,20 +38,17 @@ void AEmpireOfBossPlayerController::BeginPlay()
 	if (MyHero)
 	{
 		MoveComp = MyHero->GetCharacterMovement();
-		UABC = MyHero->GetAbilitySystemComponent();
 		OriginMaxWalkSpeed = MoveComp->MaxWalkSpeed;
 	}
 
 
 	// 🌟 2. 在末尾无缝加入 UI 订阅管道
-	if (UABC && MyHero)
+	if (MyHero && MyHero->AbilitySystemComponent && MyHero->AttributeSet)
 	{
-		if (UEOB_AttributeSet* EOB_AS = MyHero->GetEOBAttributeSet())
-		{
-			// 核心魔法：向 ASC 订阅“当 Health 属性发生任何改变时，立刻呼叫我的 OnPlayerHealthChanged”
-			UABC->GetGameplayAttributeValueChangeDelegate(UEOB_AttributeSet::GetHealthAttribute())
-			    .AddUObject(this, &AEmpireOfBossPlayerController::OnPlayerHealthChanged);
-		}
+		// 核心魔法：向 ASC 订阅“当 Health 属性发生任何改变时，立刻呼叫我的 OnPlayerHealthChanged”
+		MyHero->AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			      UEOB_AttributeSet::GetHealthAttribute())
+		      .AddUObject(this, &AEmpireOfBossPlayerController::OnPlayerHealthChanged);
 	}
 }
 
@@ -218,32 +213,33 @@ void AEmpireOfBossPlayerController::OnSetDestinationReleased()
 
 void AEmpireOfBossPlayerController::OnRootKeyStarted()
 {
-	if (UABC)
+	if (MyHero->AbilitySystemComponent)
 	{
-		UABC->AddLooseGameplayTag(FMyGameplayTags::State_Rooted);
+		MyHero->AbilitySystemComponent->AddLooseGameplayTag(FMyGameplayTags::State_Rooted);
 	}
 }
 
 void AEmpireOfBossPlayerController::OnRootKeyCompleted()
 {
-	if (UABC)
+	if (MyHero->AbilitySystemComponent)
 	{
-		UABC->RemoveLooseGameplayTag(FMyGameplayTags::State_Rooted);
+		MyHero->AbilitySystemComponent->RemoveLooseGameplayTag(FMyGameplayTags::State_Rooted);
 	}
 }
 
 void AEmpireOfBossPlayerController::OnRootKeyCancelled()
 {
-	if (UABC)
+	if (MyHero->AbilitySystemComponent)
 	{
-		UABC->RemoveLooseGameplayTag(FMyGameplayTags::State_Rooted);
+		MyHero->AbilitySystemComponent->RemoveLooseGameplayTag(FMyGameplayTags::State_Rooted);
 	}
 }
 
 bool AEmpireOfBossPlayerController::IsBlockMove()
 {
-	return UABC->HasMatchingGameplayTag(FMyGameplayTags::State_Rooted) || UABC->HasMatchingGameplayTag(
-		FMyGameplayTags::State_Restricted_KnockedBack);
+	return MyHero->AbilitySystemComponent->HasMatchingGameplayTag(FMyGameplayTags::State_Rooted) || MyHero->
+		AbilitySystemComponent->HasMatchingGameplayTag(
+			FMyGameplayTags::State_Restricted_KnockedBack);
 }
 
 void AEmpireOfBossPlayerController::RotateCharacterToCursor()
@@ -299,7 +295,7 @@ void AEmpireOfBossPlayerController::OnPlayerHealthChanged(const FOnAttributeChan
 {
 	// Data.NewValue 就是扣血/加血后的最新值！
 	float CurrentHealth = Data.NewValue;
-	float MaxHealth = MyHero->GetEOBAttributeSet()->GetMaxHealth();
+	float MaxHealth = MyHero->AttributeSet->GetMaxHealth();
 	float HealthPercent = MaxHealth > 0.f ? (CurrentHealth / MaxHealth) : 0.f;
 
 	if (EOBHUDWidget)

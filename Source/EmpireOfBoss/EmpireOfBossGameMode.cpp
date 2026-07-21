@@ -13,8 +13,9 @@ void AEmpireOfBossGameMode::BeginPlay()
 
 	UE_LOG(LogTemp, Warning, TEXT("---GameMode-BeginPlay---"));
 	FTimerHandle DummyHandle;
-	GetWorldTimerManager().SetTimer(DummyHandle, this, &AEmpireOfBossGameMode::InitLocalPlayer,
-	                                0.1f, false);
+	// GetWorldTimerManager().SetTimer(DummyHandle, this, &AEmpireOfBossGameMode::InitLocalPlayer,
+	//                                 0.1f, false);
+	GetWorldTimerManager().SetTimerForNextTick(this, &AEmpireOfBossGameMode::InitLocalPlayer);
 }
 
 

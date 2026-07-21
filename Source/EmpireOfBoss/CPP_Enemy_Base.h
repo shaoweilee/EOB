@@ -19,4 +19,15 @@ protected:
 
 public:
 	virtual void Tick(float DeltaTime) override;
+	
+	
+	// 🌟 属性改变时的 C++ 回调函数
+	void OnPlayerHealthChanged(const struct FOnAttributeChangeData& Data);
+	
+	void InitHealthPercent();
+	
+	UPROPERTY(BlueprintReadWrite, Category = "EOB|UI")
+	class UEOB_HUDWidget* EOBHUDWidget;
+	
+	class AEmpireOfBossPlayerController* PC;
 };

@@ -219,20 +219,20 @@ void AEmpireOfBossCharacter::ApplyFanDamage()
 				// 造成 2-3 点伤害
 				float Damage = FMath::RandRange(2.f, 3.f);
 				// 1. 安全地获取主角自己和击中怪物的 GAS 组件
-				UAbilitySystemComponent* MyASC = GetAbilitySystemComponent();
+				UAbilitySystemComponent* MyAbsc = AbilitySystemComponent;
 				// 💡 UAbilitySystemGlobals 可以极其安全地从任何 Actor 身上拔出它的 ASC，不管它是谁！
-				UAbilitySystemComponent* TargetASC =
+				UAbilitySystemComponent* TargetAbsc =
 					UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HitActor);
 
 				// 确保双方都有 GAS 系统，且你在蓝图里配好了 DamageEffectClass
-				if (MyASC && TargetASC && DamageEffectClass)
+				if (MyAbsc && TargetAbsc && DamageEffectClass)
 				{
 					// 2. 创建上下文：记录“这一刀是谁砍的”，方便以后做击杀回血、吸血等机制
-					FGameplayEffectContextHandle ContextHandle = MyASC->MakeEffectContext();
+					FGameplayEffectContextHandle ContextHandle = MyAbsc->MakeEffectContext();
 					ContextHandle.AddInstigator(this, this);
 
 					// 3. 打包伤害请求 (Spec)
-					FGameplayEffectSpecHandle SpecHandle = MyASC->MakeOutgoingSpec(
+					FGameplayEffectSpecHandle SpecHandle = MyAbsc->MakeOutgoingSpec(
 						DamageEffectClass, 1.f, ContextHandle);
 
 					if (SpecHandle.IsValid())
@@ -241,7 +241,7 @@ void AEmpireOfBossCharacter::ApplyFanDamage()
 						SpecHandle.Data.Get()->SetSetByCallerMagnitude(FMyGameplayTags::Data_Damage, Damage);
 
 						// 5. 狠狠地灌进怪物的 GAS 系统！
-						MyASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
+						MyAbsc->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetAbsc);
 
 						UE_LOG(LogTemp, Warning, TEXT("⚔️ 成功向怪物 [%s] 的伤害池灌入 %.1f 点随机伤害！"), *HitActor->GetName(),
 						       Damage);
