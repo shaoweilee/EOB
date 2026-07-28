@@ -15,3 +15,11 @@ void UEOPGameInstance::Init()
 	// 打印一条日志，方便你在输出日志里检查是否成功调用
 	UE_LOG(LogTemp, Warning, TEXT("GameInstance 自定义初始化成功：Native Gameplay Tags 已注册！"));
 }
+
+void UEOPGameInstance::AddGold(int32 Amount)
+{
+	GoldAmount = FMath::Max(0, GoldAmount + Amount);
+
+	// 通知蓝图 UI 刷新金币显示
+	OnGoldChanged(GoldAmount);
+}

@@ -1,6 +1,9 @@
 #include "EOB_AttributeSet.h"
 #include "GameplayEffectExtension.h"
 #include "GameFramework/Character.h"
+#include "EOPBaseCharacter.h"
+#include "EmpireOfBossCharacter.h"
+#include "EOB_DamageNumberActor.h"
 
 UEOB_AttributeSet::UEOB_AttributeSet()
 {
@@ -51,9 +54,33 @@ void UEOB_AttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
 			UE_LOG(LogTemp, Log, TEXT("[GAS属性集]: 收到原始伤害 %.1f，经护甲(%.1f)减伤后实际扣血 %.1f，剩余生命: %.1f"),
 			       LocalIncomingDamage, GetArmor(), ActualDamage, NewHealth);
 
+			// ===================== M1 新增：伤害飘字 =====================
+			// 结算完立刻在挨打者头顶弹数字：白色=怪挨打，红色=玩家挨打
+			if (AEOPBaseCharacter* OwnerChar = Cast<AEOPBaseCharacter>(GetOwningActor()))
+			{
+				if (OwnerChar->DamageNumberActorClass)
+				{
+					const FVector SpawnLoc = OwnerChar->GetActorLocation() + FVector(0.f, 0.f, 100.f);
+					FActorSpawnParameters Params;
+					Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+					if (AEOB_DamageNumberActor* NumActor = OwnerChar->GetWorld()->SpawnActor<AEOB_DamageNumberActor>(
+						OwnerChar->DamageNumberActorClass, SpawnLoc, FRotator::ZeroRotator, Params))
+					{
+						const bool bIsPlayer = OwnerChar->IsA(AEmpireOfBossCharacter::StaticClass());
+						NumActor->InitDamage(ActualDamage, bIsPlayer ? FLinearColor::Red : FLinearColor::White);
+					}
+				}
+			}
+
 			if (NewHealth <= 0.f)
 			{
-				// 后续可以在这里触发死亡逻辑
+				// ===================== M1 新增：死亡管线入口 =====================
+				// 属性集不自己处理死亡表现，统一呼叫角色基类的 HandleDeath()
+				if (AEOPBaseCharacter* OwnerChar = Cast<AEOPBaseCharacter>(GetOwningActor()))
+				{
+					OwnerChar->HandleDeath();
+				}
 			}
 		}
 	}

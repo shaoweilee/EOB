@@ -8,6 +8,7 @@ FGameplayTag FMyGameplayTags::State_Rooted;
 FGameplayTag FMyGameplayTags::State_Restricted_KnockedBack;
 FGameplayTag FMyGameplayTags::Ability_Type_CCBreak;
 FGameplayTag FMyGameplayTags::Data_Damage;
+FGameplayTag FMyGameplayTags::State_Dead;
 
 void FMyGameplayTags::InitializeNativeTags()
 {
@@ -17,4 +18,6 @@ void FMyGameplayTags::InitializeNativeTags()
 	Ability_Type_CCBreak = FGameplayTag::RequestGameplayTag(FName("Ability.Type.CCBreak"));
 	
 	Data_Damage = FGameplayTag::RequestGameplayTag(FName("Data.Damage"));
+	// M1 新增
+	State_Dead = FGameplayTag::RequestGameplayTag(FName("State.Dead"));
 }

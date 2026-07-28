@@ -6,6 +6,9 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EOB_HUDWidget.h"
 #include "EmpireOfBossPlayerController.h"
+#include "EOB_LootTableRow.h"
+#include "EOB_PickupBase.h"
+#include "Engine/DataTable.h"
 
 ACPP_Enemy_Base::ACPP_Enemy_Base()
 {
@@ -50,6 +53,8 @@ void ACPP_Enemy_Base::BeginPlay()
 void ACPP_Enemy_Base::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	// M1 新增：尸体不再执行任何 Tick 逻辑（未来的 AI 追敌也不会被尸体触发）
+	if (bIsDead) return;
 }
 
 void ACPP_Enemy_Base::OnPlayerHealthChanged(const struct FOnAttributeChangeData& Data)
@@ -60,8 +65,7 @@ void ACPP_Enemy_Base::OnPlayerHealthChanged(const struct FOnAttributeChangeData&
 	float MaxHealth = AttributeSet->GetMaxHealth();
 	float HealthPercent = MaxHealth > 0.f ? (CurrentHealth / MaxHealth) : 0.f;
 
-	UE_LOG(LogTemp, Warning, TEXT("-EOBHUDWidgetname--%s---"), *PC->EOBHUDWidget->GetName());
-	if (PC->EOBHUDWidget)
+	if (PC && PC->EOBHUDWidget)
 	{
 		UE_LOG(LogTemp, Log, TEXT("[UI 联动管道]: 检测到怪物血量发生改变！当前最新血量为: %.1f"), CurrentHealth);
 		PC->EOBHUDWidget->BP_UpdateEnemyHP(HealthPercent);
@@ -74,8 +78,58 @@ void ACPP_Enemy_Base::InitHealthPercent()
 	float MaxHealth = AttributeSet->GetMaxHealth();
 	UE_LOG(LogTemp, Warning, TEXT("---CurrentHealth: %f, MaxHealth: %f---"), CurrentHealth, MaxHealth);
 	float HealthPercent = MaxHealth > 0.f ? (CurrentHealth / MaxHealth) : 0.f;
-	if (PC->EOBHUDWidget)
+	if (PC && PC->EOBHUDWidget)
 	{
 		PC->EOBHUDWidget->BP_UpdateEnemyHP(HealthPercent);
+	}
+}
+
+// ===================== M1 新增：死亡钩子（掉落 + 尸体销毁） =====================
+
+void ACPP_Enemy_Base::OnDeath()
+{
+	// 1. 按掉落表掷点，爆出金币/药水
+	SpawnLoot();
+
+	// 2. 尸体定时销毁（蓝图 K2_OnDeath 里播的死亡动画要控制在此时长内）
+	SetLifeSpan(CorpseLifeTime);
+}
+
+void ACPP_Enemy_Base::SpawnLoot()
+{
+	if (!LootTable) return;
+
+	static const FString ContextString(TEXT("EnemyLootRoll"));
+	TArray<FEOBLootTableRow*> Rows;
+	LootTable->GetAllRows<FEOBLootTableRow>(ContextString, Rows);
+
+	for (const FEOBLootTableRow* Row : Rows)
+	{
+		if (!Row || !Row->PickupClass) continue;
+
+		// 独立概率判定
+		if (FMath::FRand() > Row->DropChance) continue;
+
+		const int32 Count = FMath::RandRange(Row->MinCount, FMath::Max(Row->MinCount, Row->MaxCount));
+		for (int32 i = 0; i < Count; ++i)
+		{
+			// 尸体周围 80cm 内随机散落，火炬之光式的爆一地
+			FVector SpawnLoc = GetActorLocation() + FVector(
+				FMath::RandRange(-80.f, 80.f), FMath::RandRange(-80.f, 80.f), 0.f);
+
+			// 垂直射线贴地，防止掉在半空或插进地板
+			FHitResult FloorHit;
+			if (GetWorld()->LineTraceSingleByChannel(FloorHit,
+			                                         SpawnLoc + FVector(0.f, 0.f, 100.f),
+			                                         SpawnLoc - FVector(0.f, 0.f, 300.f),
+			                                         ECC_GameTraceChannel2))
+			{
+				SpawnLoc = FloorHit.Location + FVector(0.f, 0.f, 2.f);
+			}
+
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			GetWorld()->SpawnActor<AEOB_PickupBase>(Row->PickupClass, SpawnLoc, FRotator::ZeroRotator, Params);
+		}
 	}
 }

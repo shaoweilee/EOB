@@ -156,6 +156,17 @@ void AEmpireOfBossCharacter::CheckAttackRangeAndExecute()
 {
 	if (!bIsTryingToAttack || !CurrentTarget) return;
 
+	// M1 新增：追击途中目标已被打死（比如被溅射伤害收掉），立刻收手，不再追尸体
+	if (UAbilitySystemComponent* TargetAsc = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(CurrentTarget))
+	{
+		if (TargetAsc->HasMatchingGameplayTag(FMyGameplayTags::State_Dead))
+		{
+			CurrentTarget = nullptr;
+			bIsTryingToAttack = false;
+			return;
+		}
+	}
+
 	float Distance = FVector::Dist(GetActorLocation(), CurrentTarget->GetActorLocation());
 
 	// 如果距离小于 200cm (2米)
@@ -223,6 +234,12 @@ void AEmpireOfBossCharacter::ApplyFanDamage()
 				// 💡 UAbilitySystemGlobals 可以极其安全地从任何 Actor 身上拔出它的 ASC，不管它是谁！
 				UAbilitySystemComponent* TargetAbsc =
 					UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(HitActor);
+
+				// M1 新增：尸体不再吃伤害（否则还会给尸体弹伤害数字）
+				if (TargetAbsc && TargetAbsc->HasMatchingGameplayTag(FMyGameplayTags::State_Dead))
+				{
+					continue;
+				}
 
 				// 确保双方都有 GAS 系统，且你在蓝图里配好了 DamageEffectClass
 				if (MyAbsc && TargetAbsc && DamageEffectClass)

@@ -1,6 +1,9 @@
 #include "EOPBaseCharacter.h"
 #include "AbilitySystemComponent.h"
 #include "EOB_AttributeSet.h" // 🌟 引入我们刚才确定好名字的属性集头文件
+#include "MyGameplayTagsLibrary.h"
+#include "Components/CapsuleComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 AEOPBaseCharacter::AEOPBaseCharacter()
 {
@@ -55,4 +58,46 @@ void AEOPBaseCharacter::InitializeDefaultAttributes()
 UAbilitySystemComponent* AEOPBaseCharacter::GetAbilitySystemComponent() const
 {
 	return AbilitySystemComponent;
+}
+
+// ===================== M1 新增：死亡管线 =====================
+
+void AEOPBaseCharacter::HandleDeath()
+{
+	// 兜底：伤害结算可能同一帧灌进来多次，只死一次
+	if (bIsDead) return;
+	bIsDead = true;
+
+	// 1. 打死亡标签 + 打断所有正在释放的技能
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->AddLooseGameplayTag(FMyGameplayTags::State_Dead);
+		AbilitySystemComponent->CancelAllAbilities();
+	}
+
+	// 2. 停止移动与当前动画蒙太奇
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->StopMovementImmediately();
+		MoveComp->DisableMovement();
+	}
+	StopAnimMontage();
+
+	// 3. 胶囊体关闭碰撞：尸体不挡路、鼠标射线也扫不到
+	//    （敌人血条悬停、点击攻击都会因此自动忽略尸体）
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	// 4. 分发钩子：先 C++ 子类逻辑（敌人掉落），再蓝图表现（死亡动画/UI）
+	OnDeath();
+	K2_OnDeath();
+
+	UE_LOG(LogTemp, Warning, TEXT("[死亡管线] %s 已死亡。"), *GetName());
+}
+
+void AEOPBaseCharacter::OnDeath()
+{
+	// 基类默认无额外逻辑，敌人子类（CPP_Enemy_Base）重写：掉落 + 尸体销毁
 }
