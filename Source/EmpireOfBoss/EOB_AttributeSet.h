@@ -51,6 +51,29 @@ public:
 	ATTRIBUTE_ACCESSORS(UEOB_AttributeSet, Armor);
 
 	/* =====================================================================
+ * M2 新增：四维主属性 + 攻击力（装备词缀的修改目标）
+ * ===================================================================== */
+	UPROPERTY(BlueprintReadOnly, Category = "EOB|Attributes")
+	FGameplayAttributeData Strength;
+	ATTRIBUTE_ACCESSORS(UEOB_AttributeSet, Strength);
+
+	UPROPERTY(BlueprintReadOnly, Category = "EOB|Attributes")
+	FGameplayAttributeData Dexterity;
+	ATTRIBUTE_ACCESSORS(UEOB_AttributeSet, Dexterity);
+
+	UPROPERTY(BlueprintReadOnly, Category = "EOB|Attributes")
+	FGameplayAttributeData Focus;
+	ATTRIBUTE_ACCESSORS(UEOB_AttributeSet, Focus);
+
+	UPROPERTY(BlueprintReadOnly, Category = "EOB|Attributes")
+	FGameplayAttributeData Vitality;
+	ATTRIBUTE_ACCESSORS(UEOB_AttributeSet, Vitality);
+
+	UPROPERTY(BlueprintReadOnly, Category = "EOB|Attributes")
+	FGameplayAttributeData AttackPower;
+	ATTRIBUTE_ACCESSORS(UEOB_AttributeSet, AttackPower);
+
+	/* =====================================================================
 	 * 元属性 (Meta Attributes - 伤害结算池)
 	 * ===================================================================== */
 	UPROPERTY(BlueprintReadOnly, Category = "EOB|Attributes")

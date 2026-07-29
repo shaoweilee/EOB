@@ -8,6 +8,7 @@ class USphereComponent;
 class UStaticMeshComponent;
 class UGameplayEffect;
 class AEmpireOfBossCharacter;
+class UEOB_ItemDefinition;
 
 /**
  * 拾取物基类：金币、药水、（未来的）装备掉落都继承它。
@@ -45,11 +46,30 @@ protected:
 	/** 拾取时对主角施加的 GE（药水回血等，Instant 类型） */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Pickup")
 	TSubclassOf<UGameplayEffect> GrantedEffectClass;
+	
+	// ===================== M2 新增：装备掉落 =====================
+
+	/** 装备定义（设置后此拾取物变为装备：拾取时掷品质进背包） */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Pickup")
+	TObjectPtr<UEOB_ItemDefinition> DroppedItemDefinition;
+
+	/** 品质权重：白/绿/蓝/金（按比例生效，不用凑满 100） */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Pickup")
+	float WhiteWeight = 70.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Pickup")
+	float GreenWeight = 20.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Pickup")
+	float BlueWeight = 8.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Pickup")
+	float GoldWeight = 2.f;
 
 	UFUNCTION()
 	void OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-						 UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
-						 bool bFromSweep, const FHitResult& SweepResult);
+	                     UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
+	                     bool bFromSweep, const FHitResult& SweepResult);
 
 	/** 被拾取时的表现钩子：蓝图重写来播音效/特效（基类已处理数值逻辑，随后自动销毁） */
 	UFUNCTION(BlueprintNativeEvent, Category = "EOB|Pickup")

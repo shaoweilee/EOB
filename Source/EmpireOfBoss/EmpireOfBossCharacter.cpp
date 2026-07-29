@@ -17,6 +17,8 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "MyGameplayTagsLibrary.h"
+#include "EOB_InventoryComponent.h"
+#include "EOB_AttributeSet.h"
 
 AEmpireOfBossCharacter::AEmpireOfBossCharacter()
 {
@@ -56,6 +58,9 @@ AEmpireOfBossCharacter::AEmpireOfBossCharacter()
 	// 让主角在物理矩阵中成为独一无二的 HeroType
 	// 假设 HeroType 在 DefaultEngine.ini 中被分配为了 ECC_GameTraceChannel1 
 	GetCapsuleComponent()->SetCollisionObjectType(ECC_GameTraceChannel1);
+
+	// M2 新增：背包与装备组件
+	InventoryComponent = CreateDefaultSubobject<UEOB_InventoryComponent>(TEXT("InventoryComponent"));
 }
 
 void AEmpireOfBossCharacter::BeginPlay()
@@ -227,8 +232,10 @@ void AEmpireOfBossCharacter::ApplyFanDamage()
 
 			if (Angle <= HalfAngle)
 			{
-				// 造成 2-3 点伤害
-				float Damage = FMath::RandRange(2.f, 3.f);
+				// M2：基础随机伤害 + 攻击力属性（武器和词缀的加成从这里生效）
+				const float BonusAttack = AttributeSet ? AttributeSet->GetAttackPower() : 0.f;
+				float Damage = FMath::RandRange(2.f, 3.f) + BonusAttack;
+
 				// 1. 安全地获取主角自己和击中怪物的 GAS 组件
 				UAbilitySystemComponent* MyAbsc = AbilitySystemComponent;
 				// 💡 UAbilitySystemGlobals 可以极其安全地从任何 Actor 身上拔出它的 ASC，不管它是谁！

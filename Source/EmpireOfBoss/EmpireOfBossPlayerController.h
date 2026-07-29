@@ -43,6 +43,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* RootedAction;
 
+	/** M2: 背包开合按键 */
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* ToggleInventoryAction;
 
 	/** True if the controlled character should navigate to the mouse cursor. */
 	uint32 bMoveToMouseCursor : 1;
@@ -103,4 +106,5 @@ protected:
 	void OnPlayerHealthChanged(const struct FOnAttributeChangeData& Data);
 
 	AActor* GetTargetUnderCursor();
+	void OnToggleInventory();
 };

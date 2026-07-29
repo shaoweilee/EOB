@@ -5,6 +5,8 @@
 #include "EOPGameInstance.h"
 #include "AbilitySystemComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "EOB_ItemDefinition.h"
+#include "EOB_InventoryComponent.h"
 
 AEOB_PickupBase::AEOB_PickupBase()
 {
@@ -64,6 +66,30 @@ void AEOB_PickupBase::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, 
 			Hero->AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 			UE_LOG(LogTemp, Log, TEXT("[拾取] 药水生效，已对主角施加 GE: %s"), *GrantedEffectClass->GetName());
 		}
+	}
+
+	// ===== 3. M2 新增：装备入口：掷品质 → 生成实例 → 进背包 =====
+	if (DroppedItemDefinition)
+	{
+		UEOB_InventoryComponent* Inv = Hero->InventoryComponent;
+		if (!Inv) return;
+
+		const EEOBRarity Rarity = UEOB_InventoryComponent::RollRarity(
+			WhiteWeight, GreenWeight, BlueWeight, GoldWeight);
+		const FEOBItemInstance NewItem = Inv->CreateItemInstance(DroppedItemDefinition, Rarity);
+		const int32 SlotIndex = Inv->AddItem(NewItem);
+
+		if (SlotIndex == INDEX_NONE)
+		{
+			// 背包满了：留在地上，不触发拾取表现、不销毁
+			UE_LOG(LogTemp, Warning, TEXT("[拾取] 背包已满！%s 留在原地。"),
+			       *DroppedItemDefinition->ItemName.ToString());
+			return;
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("[拾取] 装备入包：%s（品质: %s）"),
+		       *DroppedItemDefinition->ItemName.ToString(),
+		       *UEnum::GetValueAsString(Rarity));
 	}
 
 	// 蓝图表现钩子（音效/特效），然后销毁

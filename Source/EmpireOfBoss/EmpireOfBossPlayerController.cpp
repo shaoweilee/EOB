@@ -92,6 +92,9 @@ void AEmpireOfBossPlayerController::SetupInputComponent()
 			                                   &AEmpireOfBossPlayerController::OnRootKeyCompleted);
 			EnhancedInputComponent->BindAction(RootedAction, ETriggerEvent::Canceled, this,
 			                                   &AEmpireOfBossPlayerController::OnRootKeyCancelled);
+			// M2: 背包开合
+			EnhancedInputComponent->BindAction(ToggleInventoryAction, ETriggerEvent::Started, this,
+			                                   &AEmpireOfBossPlayerController::OnToggleInventory);
 		}
 		else
 		{
@@ -355,5 +358,13 @@ void AEmpireOfBossPlayerController::CheckEnemyHoverUnderCursor()
 			// 🌟 呼叫蓝图事件，隐藏血条
 			EOBHUDWidget->ShowStateBar(ESlateVisibility::Collapsed); // 或者 ESlateVisibility::Hidden
 		}
+	}
+}
+
+void AEmpireOfBossPlayerController::OnToggleInventory()
+{
+	if (EOBHUDWidget)
+	{
+		EOBHUDWidget->ToggleInventoryPanels();
 	}
 }

@@ -23,6 +23,8 @@ public:
 	static FGameplayTag Data_Damage;
 	// M1 新增：死亡状态标签（攻击逻辑/AI/UI 统一查询尸体用）
 	static FGameplayTag State_Dead;
+	// M2 新增：装备词缀数值的 SetByCaller 标签
+	static FGameplayTag Data_AffixMagnitude;
 };
 
 UCLASS()
