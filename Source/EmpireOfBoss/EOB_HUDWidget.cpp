@@ -31,13 +31,12 @@ void UEOB_HUDWidget::NativeConstruct()
 
 void UEOB_HUDWidget::ToggleInventoryPanels()
 {
-	const auto Toggle = [](UUserWidget* Panel)
-	{
-		if (!Panel) return;
-		const bool bVisible = Panel->GetVisibility() == ESlateVisibility::Visible;
-		Panel->SetVisibility(bVisible ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-	};
+	const bool bNowVisible = InventoryPanel && InventoryPanel->IsVisible();
+	// 原来这里是 ESlateVisibility::Visible，改成 SelfHitTestInvisible
+	const ESlateVisibility NewVis = bNowVisible
+		                                ? ESlateVisibility::Collapsed
+		                                : ESlateVisibility::SelfHitTestInvisible;
 
-	Toggle(InventoryPanel);
-	Toggle(EquipmentPanel);
+	if (InventoryPanel) InventoryPanel->SetVisibility(NewVis);
+	if (EquipmentPanel) EquipmentPanel->SetVisibility(NewVis);
 }

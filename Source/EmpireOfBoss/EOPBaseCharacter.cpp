@@ -23,11 +23,14 @@ void AEOPBaseCharacter::BeginPlay()
 
 	if (AbilitySystemComponent)
 	{
+		// 防御：旧蓝图资产导致 AttributeSet 丢失时自动重建
+		if (!AttributeSet)
+		{
+			AttributeSet = NewObject<UEOB_AttributeSet>(this, TEXT("AttributeSet"));
+			UE_LOG(LogTemp, Warning, TEXT("[GAS 角色基类]: %s 的 AttributeSet 丢失，已防御性重建！"), *GetName());
+		}
 		// 3. 初始化 GAS 宿主信息
 		AbilitySystemComponent->InitAbilityActorInfo(this, this);
-
-		// 4. 🌟 核心注入：触发属性默认值初始化
-		// 在EOB_GameInitSubsystem.cpp中初始化，InitializeDefaultAttributes();
 	}
 }
 

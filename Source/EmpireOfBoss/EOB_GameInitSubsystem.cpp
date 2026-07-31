@@ -22,20 +22,26 @@ void UEOB_GameInitSubsystem::OrchestratePlayerInitialization(AEmpireOfBossPlayer
 
 	// ======= 步骤3：统一构建UI + 首帧强刷血蓝条 =======
 	AEmpireOfBossHUD* EOBHUD = Cast<AEmpireOfBossHUD>(PC->GetHUD());
+	UE_LOG(LogTemp, Warning, TEXT("[Init排查] GetHUD拿到的是: %s，Cast结果: %s"),
+	       *GetNameSafe(PC->GetHUD()), EOBHUD ? TEXT("成功") : TEXT("失败"));
+
 	if (EOBHUD)
 	{
 		// 显式命令HUD创建UI（HUD里会把自动创建去掉）
 		EOBHUD->InitializeHUDWidgets();
 
 		UEOB_HUDWidget* HUDWidget = EOBHUD->GetHUDWidgetInstance();
-		// 把UI实例同步给PC，方便PC里的属性变化回调直接调用
 		PC->EOBHUDWidget = HUDWidget;
+
+		UE_LOG(LogTemp, Warning, TEXT("[Init排查] HUDWidget: %s，MyHero: %s，AttributeSet: %s"),
+		       *GetNameSafe(HUDWidget),
+		       *GetNameSafe(PC->MyHero),
+		       *GetNameSafe(PC->MyHero ? PC->MyHero->AttributeSet : nullptr));
 
 		if (HUDWidget && PC->MyHero && PC->MyHero->AttributeSet)
 		{
 			const UEOB_AttributeSet* AttribSet = PC->MyHero->AttributeSet;
 
-			// 属性已100%初始化完成，计算首帧精确比例，杜绝0值闪烁
 			float HPPercent = (AttribSet->GetMaxHealth() > 0.f)
 				                  ? (AttribSet->GetHealth() / AttribSet->GetMaxHealth())
 				                  : 1.f;
@@ -43,7 +49,8 @@ void UEOB_GameInitSubsystem::OrchestratePlayerInitialization(AEmpireOfBossPlayer
 				                  ? (AttribSet->GetMana() / AttribSet->GetMaxMana())
 				                  : 1.f;
 
-			// 首帧强刷UI视觉
+			UE_LOG(LogTemp, Warning, TEXT("[Init排查] 已走到首帧强刷！HP=%.2f MP=%.2f"), HPPercent, MPPercent);
+
 			HUDWidget->VM_UpdateHPVisual(HPPercent);
 			HUDWidget->VM_UpdateMPVisual(MPPercent);
 		}
