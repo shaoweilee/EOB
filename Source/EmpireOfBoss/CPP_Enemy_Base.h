@@ -43,6 +43,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Combat")
 	float CorpseLifeTime = 3.f;
 
+	/** M3a 新增：击杀经验奖励 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Combat")
+	float XPReward = 50.f;
+
 	/** 重写 C++ 死亡钩子：掉落 + 尸体定时销毁 */
 	virtual void OnDeath() override;
 

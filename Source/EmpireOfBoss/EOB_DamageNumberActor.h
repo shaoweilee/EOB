@@ -22,8 +22,11 @@ class EMPIREOFBOSS_API AEOB_DamageNumberActor : public AActor
 public:
 	AEOB_DamageNumberActor();
 
-	/** 由属性集在结算伤害后调用 */
-	void InitDamage(float Damage, FLinearColor Color);
+	/** 由属性集在结算伤害后调用（bIsCrit=true 时数字更大更醒目） */
+	void InitDamage(float Damage, FLinearColor Color, bool bIsCrit = false);
+
+	/** M3a：飘自定义文字（如"闪避！"） */
+	void InitCustomText(const FText& Text, FLinearColor Color);
 
 protected:
 	virtual void BeginPlay() override;
@@ -52,4 +55,7 @@ private:
 	bool bHasPending = false;
 	float PendingDamage = 0.f;
 	FLinearColor PendingColor = FLinearColor::White;
+	bool bPendingIsCrit = false;
+	bool bHasPendingCustomText = false;
+	FText PendingCustomText;
 };

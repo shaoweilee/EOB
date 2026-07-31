@@ -74,6 +74,29 @@ public:
 	ATTRIBUTE_ACCESSORS(UEOB_AttributeSet, AttackPower);
 
 	/* =====================================================================
+	 * M3a 新增：战斗派生属性（TL2 还原版）
+	 * ===================================================================== */
+	/** 暴击率（%），基础 5，敏捷加点提升 */
+	UPROPERTY(BlueprintReadOnly, Category = "EOB|Attributes")
+	FGameplayAttributeData CritChance;
+	ATTRIBUTE_ACCESSORS(UEOB_AttributeSet, CritChance);
+
+	/** 暴击伤害（%），150 = 1.5 倍，力量加点提升 */
+	UPROPERTY(BlueprintReadOnly, Category = "EOB|Attributes")
+	FGameplayAttributeData CritDamage;
+	ATTRIBUTE_ACCESSORS(UEOB_AttributeSet, CritDamage);
+
+	/** 闪避率（%），基础 0，敏捷加点提升 */
+	UPROPERTY(BlueprintReadOnly, Category = "EOB|Attributes")
+	FGameplayAttributeData DodgeChance;
+	ATTRIBUTE_ACCESSORS(UEOB_AttributeSet, DodgeChance);
+
+	/** 技能伤害加成（%），专注加点提升，M3b 技能用 */
+	UPROPERTY(BlueprintReadOnly, Category = "EOB|Attributes")
+	FGameplayAttributeData SkillDamageBonus;
+	ATTRIBUTE_ACCESSORS(UEOB_AttributeSet, SkillDamageBonus);
+
+	/* =====================================================================
 	 * 元属性 (Meta Attributes - 伤害结算池)
 	 * ===================================================================== */
 	UPROPERTY(BlueprintReadOnly, Category = "EOB|Attributes")

@@ -22,6 +22,9 @@ protected:
 	TObjectPtr<UTextBlock> DamageText;
 
 public:
-	/** 设置要飘的伤害数值与颜色（白=怪挨打，红=玩家挨打） */
-	void SetDamageValue(float Damage, FLinearColor Color);
+	/** 设置要飘的伤害数值与颜色（白=怪挨打，红=玩家挨打，橙=暴击） */
+	void SetDamageValue(float Damage, FLinearColor Color, bool bIsCrit = false);
+
+	/** M3a：飘自定义文字（如"闪避！"） */
+	void SetCustomText(const FText& Text, FLinearColor Color);
 };

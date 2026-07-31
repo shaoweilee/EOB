@@ -25,6 +25,8 @@ public:
 	static FGameplayTag State_Dead;
 	// M2 新增：装备词缀数值的 SetByCaller 标签
 	static FGameplayTag Data_AffixMagnitude;
+	// M3a 新增：本次伤害是否暴击的 SetByCaller 标记
+	static FGameplayTag Data_IsCrit;
 };
 
 UCLASS()

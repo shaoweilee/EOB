@@ -95,6 +95,10 @@ void AEmpireOfBossPlayerController::SetupInputComponent()
 			// M2: 背包开合
 			EnhancedInputComponent->BindAction(ToggleInventoryAction, ETriggerEvent::Started, this,
 			                                   &AEmpireOfBossPlayerController::OnToggleInventory);
+
+			// M3a: 角色面板开合
+			EnhancedInputComponent->BindAction(ToggleCharacterAction, ETriggerEvent::Started, this,
+			                                   &AEmpireOfBossPlayerController::OnToggleCharacter);
 		}
 		else
 		{
@@ -366,5 +370,12 @@ void AEmpireOfBossPlayerController::OnToggleInventory()
 	if (EOBHUDWidget)
 	{
 		EOBHUDWidget->ToggleInventoryPanels();
+	}
+}
+void AEmpireOfBossPlayerController::OnToggleCharacter()
+{
+	if (EOBHUDWidget)
+	{
+		EOBHUDWidget->ToggleCharacterPanel();
 	}
 }

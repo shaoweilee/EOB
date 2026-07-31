@@ -9,6 +9,7 @@
 class UProgressBar;
 class UEOB_Widget_Inventory;
 class UEOB_Widget_EquipmentPanel;
+class UEOB_Widget_CharacterPanel;
 
 UCLASS()
 class EMPIREOFBOSS_API UEOB_HUDWidget : public UUserWidget
@@ -43,6 +44,16 @@ public: /** 🌟 C++ 核心事件：当血量或蓝量改变时，C++ 呼叫这�
 	/** 开关背包和装备面板（由 PlayerController 的 I 键触发） */
 	UFUNCTION(BlueprintCallable, Category = "EOB|UI")
 	void ToggleInventoryPanels();
+	
+	/** M3a：开关角色面板（C 键） */
+	UFUNCTION(BlueprintCallable, Category = "EOB|UI")
+	void ToggleCharacterPanel();
+
+	/** M3a：从英雄的 LevelComponent 读经验，驱动现成的 BP_UpdateXP 事件刷新 Synty 经验条 */
+	void RefreshXPDisplay();
+
+	/** M3a：若角色面板开着则刷新（加点/升级后呼叫） */
+	void RefreshCharacterPanel();
 
 protected:
 	/** 在 HUD 蓝图默认值里选你的 WBP_Inventory / WBP_EquipmentPanel */
@@ -57,4 +68,12 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<UEOB_Widget_EquipmentPanel> EquipmentPanel;
+	
+	// ===================== M3a：角色面板（Synty UI 没有，自建） =====================
+	/** 在 HUD 蓝图默认值里选你的 WBP_CharacterPanel */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
+	TSubclassOf<UEOB_Widget_CharacterPanel> CharacterPanelClass;
+
+	UPROPERTY()
+	TObjectPtr<UEOB_Widget_CharacterPanel> CharacterPanel;
 };

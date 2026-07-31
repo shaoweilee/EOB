@@ -29,11 +29,20 @@ void AEOB_DamageNumberActor::BeginPlay()
 	TryApplyToWidget();
 }
 
-void AEOB_DamageNumberActor::InitDamage(float Damage, FLinearColor Color)
+void AEOB_DamageNumberActor::InitDamage(float Damage, FLinearColor Color, bool bIsCrit)
 {
 	PendingDamage = Damage;
 	PendingColor = Color;
+	bPendingIsCrit = bIsCrit;
 	bHasPending = true;
+	TryApplyToWidget();
+}
+
+void AEOB_DamageNumberActor::InitCustomText(const FText& Text, FLinearColor Color)
+{
+	PendingCustomText = Text;
+	PendingColor = Color;
+	bHasPendingCustomText = true;
 	TryApplyToWidget();
 }
 
@@ -63,11 +72,17 @@ void AEOB_DamageNumberActor::Tick(float DeltaTime)
 
 void AEOB_DamageNumberActor::TryApplyToWidget()
 {
-	if (!bHasPending) return;
-
 	if (UEOB_Widget_DamageNumber* W = Cast<UEOB_Widget_DamageNumber>(NumberWidget->GetWidget()))
 	{
-		W->SetDamageValue(PendingDamage, PendingColor);
-		bHasPending = false;
+		if (bHasPending)
+		{
+			W->SetDamageValue(PendingDamage, PendingColor, bPendingIsCrit);
+			bHasPending = false;
+		}
+		if (bHasPendingCustomText)
+		{
+			W->SetCustomText(PendingCustomText, PendingColor);
+			bHasPendingCustomText = false;
+		}
 	}
 }

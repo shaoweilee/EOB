@@ -7,6 +7,7 @@
 #include "EmpireOfBossCharacter.generated.h"
 
 class UEOB_InventoryComponent;
+class UEOB_LevelComponent;
 
 /**
  *  A controllable top-down perspective character
@@ -67,10 +68,14 @@ public:
 	// 🌟 在蓝图中把你刚才建好的 GE_Damage 拖到这个槽位里！
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat")
 	TSubclassOf<class UGameplayEffect> DamageEffectClass;
-	
+
 	/** M2 新增：背包与装备组件 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "EOB|Inventory")
 	TObjectPtr<UEOB_InventoryComponent> InventoryComponent;
+
+	/** M3a 新增：经验/升级/属性点组件 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "EOB|Level")
+	TObjectPtr<UEOB_LevelComponent> LevelComponent;
 
 	/** 开启/关闭穿怪状态 */
 	UFUNCTION(BlueprintCallable, Category = "EOB|Combat")

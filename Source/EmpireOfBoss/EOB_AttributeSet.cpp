@@ -4,6 +4,7 @@
 #include "EOPBaseCharacter.h"
 #include "EmpireOfBossCharacter.h"
 #include "EOB_DamageNumberActor.h"
+#include "MyGameplayTagsLibrary.h"
 
 UEOB_AttributeSet::UEOB_AttributeSet()
 {
@@ -43,6 +44,28 @@ void UEOB_AttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
 
 		if (LocalIncomingDamage > 0.f)
 		{
+			// 🌀 M3a 新增：闪避判定（TL2：敏捷提供闪避；怪物 DodgeChance 基础为 0，天然不触发）
+			if (GetDodgeChance() > 0.f && FMath::FRand() * 100.f < GetDodgeChance())
+			{
+				if (AEOPBaseCharacter* OwnerChar = Cast<AEOPBaseCharacter>(GetOwningActor()))
+				{
+					if (OwnerChar->DamageNumberActorClass)
+					{
+						const FVector SpawnLoc = OwnerChar->GetActorLocation() + FVector(0.f, 0.f, 100.f);
+						FActorSpawnParameters Params;
+						Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+						if (AEOB_DamageNumberActor* NumActor = OwnerChar->GetWorld()->SpawnActor<
+							AEOB_DamageNumberActor>(
+							OwnerChar->DamageNumberActorClass, SpawnLoc, FRotator::ZeroRotator, Params))
+						{
+							NumActor->InitCustomText(FText::FromString(TEXT("闪避！")), FLinearColor(0.4f, 0.8f, 1.f));
+						}
+					}
+				}
+				UE_LOG(LogTemp, Log, TEXT("[闪避] %.1f 点伤害被完全闪避！"), LocalIncomingDamage);
+				return; // 不扣血、不飘伤害数字
+			}
+
 			// 🛡️ 经典的暗黑式减伤公式：实际伤害 = 原始伤害 * (100 / (100 + 护甲))
 			const float DefenseFactor = 100.f / (100.f + GetArmor());
 			const float ActualDamage = LocalIncomingDamage * DefenseFactor;
@@ -68,7 +91,13 @@ void UEOB_AttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
 						OwnerChar->DamageNumberActorClass, SpawnLoc, FRotator::ZeroRotator, Params))
 					{
 						const bool bIsPlayer = OwnerChar->IsA(AEmpireOfBossCharacter::StaticClass());
-						NumActor->InitDamage(ActualDamage, bIsPlayer ? FLinearColor::Red : FLinearColor::White);
+						// 💥 M3a：读攻击方塞进 Spec 的暴击标记，暴击飘橙色大数字
+						const bool bIsCrit = Data.EffectSpec.GetSetByCallerMagnitude(
+							FMyGameplayTags::Data_IsCrit, false, 0.f) > 0.f;
+						const FLinearColor NumColor = bIsCrit
+							                              ? FLinearColor(1.f, 0.55f, 0.f)
+							                              : (bIsPlayer ? FLinearColor::Red : FLinearColor::White);
+						NumActor->InitDamage(ActualDamage, NumColor, bIsCrit);
 					}
 				}
 			}

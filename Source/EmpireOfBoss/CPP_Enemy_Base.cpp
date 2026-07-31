@@ -9,6 +9,8 @@
 #include "EOB_LootTableRow.h"
 #include "EOB_PickupBase.h"
 #include "Engine/DataTable.h"
+#include "EmpireOfBossCharacter.h"
+#include "EOB_LevelComponent.h"
 
 ACPP_Enemy_Base::ACPP_Enemy_Base()
 {
@@ -90,7 +92,20 @@ void ACPP_Enemy_Base::OnDeath()
 {
 	// 1. 按掉落表掷点，爆出金币/药水
 	SpawnLoot();
-
+	// 3. M3a 新增：给英雄发击杀经验
+	if (UWorld* World = GetWorld())
+	{
+		APlayerController* PlayerCtlr = World->GetFirstPlayerController();
+		if (AEmpireOfBossCharacter* Hero = PlayerCtlr
+			                                   ? Cast<AEmpireOfBossCharacter>(PlayerCtlr->GetCharacter())
+			                                   : nullptr)
+		{
+			if (Hero->LevelComponent)
+			{
+				Hero->LevelComponent->AddExperience(XPReward);
+			}
+		}
+	}
 	// 2. 尸体定时销毁（蓝图 K2_OnDeath 里播的死亡动画要控制在此时长内）
 	SetLifeSpan(CorpseLifeTime);
 }

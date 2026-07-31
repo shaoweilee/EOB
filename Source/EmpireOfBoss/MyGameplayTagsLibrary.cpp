@@ -10,6 +10,8 @@ FGameplayTag FMyGameplayTags::Ability_Type_CCBreak;
 FGameplayTag FMyGameplayTags::Data_Damage;
 FGameplayTag FMyGameplayTags::State_Dead;
 FGameplayTag FMyGameplayTags::Data_AffixMagnitude;
+// M3a 新增
+FGameplayTag FMyGameplayTags::Data_IsCrit;
 
 void FMyGameplayTags::InitializeNativeTags()
 {
@@ -23,4 +25,6 @@ void FMyGameplayTags::InitializeNativeTags()
 	State_Dead = FGameplayTag::RequestGameplayTag(FName("State.Dead"));
 	// M2 新增
 	Data_AffixMagnitude = FGameplayTag::RequestGameplayTag(FName("Data.AffixMagnitude"));
+	// M3a 新增
+	Data_IsCrit = FGameplayTag::RequestGameplayTag(FName("Data.IsCrit"));
 }

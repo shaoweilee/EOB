@@ -19,6 +19,7 @@
 #include "MyGameplayTagsLibrary.h"
 #include "EOB_InventoryComponent.h"
 #include "EOB_AttributeSet.h"
+#include "EOB_LevelComponent.h"
 
 AEmpireOfBossCharacter::AEmpireOfBossCharacter()
 {
@@ -61,6 +62,9 @@ AEmpireOfBossCharacter::AEmpireOfBossCharacter()
 
 	// M2 新增：背包与装备组件
 	InventoryComponent = CreateDefaultSubobject<UEOB_InventoryComponent>(TEXT("InventoryComponent"));
+
+	// M3a 新增：经验/升级/属性点组件
+	LevelComponent = CreateDefaultSubobject<UEOB_LevelComponent>(TEXT("LevelComponent"));
 }
 
 void AEmpireOfBossCharacter::BeginPlay()
@@ -236,6 +240,15 @@ void AEmpireOfBossCharacter::ApplyFanDamage()
 				const float BonusAttack = AttributeSet ? AttributeSet->GetAttackPower() : 0.f;
 				float Damage = FMath::RandRange(2.f, 3.f) + BonusAttack;
 
+				// 💥 M3a 新增：暴击判定（TL2：敏捷提供暴击率，力量提供暴击伤害）
+				const float CritChance = AttributeSet ? AttributeSet->GetCritChance() : 0.f;
+				const bool bIsCrit = CritChance > 0.f && (FMath::FRand() * 100.f < CritChance);
+				if (bIsCrit)
+				{
+					const float CritMultiplier = AttributeSet ? AttributeSet->GetCritDamage() / 100.f : 1.5f;
+					Damage *= CritMultiplier;
+				}
+
 				// 1. 安全地获取主角自己和击中怪物的 GAS 组件
 				UAbilitySystemComponent* MyAbsc = AbilitySystemComponent;
 				// 💡 UAbilitySystemGlobals 可以极其安全地从任何 Actor 身上拔出它的 ASC，不管它是谁！
@@ -263,6 +276,9 @@ void AEmpireOfBossCharacter::ApplyFanDamage()
 					{
 						// 🌟 4. 将你 C++ 里随机出来的 2~3 点伤害，塞进 SetByCaller 里！
 						SpecHandle.Data.Get()->SetSetByCallerMagnitude(FMyGameplayTags::Data_Damage, Damage);
+						// 💥 M3a：把暴击标记也塞进 Spec，目标属性集结算时读出来飘橙色大数字
+						SpecHandle.Data.Get()->SetSetByCallerMagnitude(FMyGameplayTags::Data_IsCrit,
+						                                               bIsCrit ? 1.f : 0.f);
 
 						// 5. 狠狠地灌进怪物的 GAS 系统！
 						MyAbsc->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetAbsc);

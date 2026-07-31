@@ -46,6 +46,10 @@ protected:
 	/** M2: 背包开合按键 */
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* ToggleInventoryAction;
+	
+	/** M3a: 角色面板开合按键 */
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* ToggleCharacterAction;
 
 	/** True if the controlled character should navigate to the mouse cursor. */
 	uint32 bMoveToMouseCursor : 1;
@@ -107,4 +111,5 @@ protected:
 
 	AActor* GetTargetUnderCursor();
 	void OnToggleInventory();
+	void OnToggleCharacter();
 };
