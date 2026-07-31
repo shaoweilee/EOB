@@ -35,6 +35,9 @@ public: /** 🌟 C++ 核心事件：当血量或蓝量改变时，C++ 呼叫这�
 	UFUNCTION(BlueprintImplementableEvent)
 	void BP_UpdateEnemyHP(float HealthPercent);
 
+	UFUNCTION(BlueprintImplementableEvent)
+	void BP_UpdateXP(int CurrentXP, int MaxXP);
+
 	// ===================== M2 新增：背包/装备面板管理 =====================
 
 	/** 开关背包和装备面板（由 PlayerController 的 I 键触发） */
