@@ -7,6 +7,7 @@
 
 class UTextBlock;
 class UButton;
+class AEmpireOfBossCharacter;
 
 /**
  * M3a：角色面板（C 键开关）
@@ -24,6 +25,7 @@ public:
 
 protected:
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 
 	// ===================== 文本（名字必须一致） =====================
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -80,4 +82,13 @@ protected:
 
 private:
 	void SpendPoint(EEOBStatType Stat);
+
+	/** 🌟 把面板展示的属性挂到 GAS 变化回调上：装备/升级/药水一改属性，面板立刻自刷 */
+	void BindAttributeDelegates(AEmpireOfBossCharacter* Hero);
+	void UnbindAttributeDelegates();
+
+	void OnWatchedAttributeChanged(const struct FOnAttributeChangeData& Data);
+
+	bool bDelegatesBound = false;
+	TWeakObjectPtr<class UAbilitySystemComponent> BoundASC;
 };

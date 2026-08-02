@@ -4,6 +4,34 @@
 #include "Components/Button.h"
 #include "EmpireOfBossCharacter.h"
 #include "EOB_AttributeSet.h"
+#include "AbilitySystemComponent.h"
+#include "GameplayEffectTypes.h"
+
+
+namespace
+{
+	/** 面板上展示的所有属性：任何一个变了都触发面板自刷 */
+	const TArray<FGameplayAttribute>& GetWatchedAttributes()
+	{
+		static const TArray<FGameplayAttribute> Watched = {
+			UEOB_AttributeSet::GetStrengthAttribute(),
+			UEOB_AttributeSet::GetDexterityAttribute(),
+			UEOB_AttributeSet::GetFocusAttribute(),
+			UEOB_AttributeSet::GetVitalityAttribute(),
+			UEOB_AttributeSet::GetAttackPowerAttribute(),
+			UEOB_AttributeSet::GetArmorAttribute(),
+			UEOB_AttributeSet::GetCritChanceAttribute(),
+			UEOB_AttributeSet::GetCritDamageAttribute(),
+			UEOB_AttributeSet::GetDodgeChanceAttribute(),
+			UEOB_AttributeSet::GetSkillDamageBonusAttribute(),
+			UEOB_AttributeSet::GetHealthAttribute(),
+			UEOB_AttributeSet::GetMaxHealthAttribute(),
+			UEOB_AttributeSet::GetManaAttribute(),
+			UEOB_AttributeSet::GetMaxManaAttribute(),
+		};
+		return Watched;
+	}
+}
 
 void UEOB_Widget_CharacterPanel::NativeConstruct()
 {
@@ -19,6 +47,8 @@ void UEOB_Widget_CharacterPanel::RefreshFromHero()
 {
 	AEmpireOfBossCharacter* Hero = Cast<AEmpireOfBossCharacter>(GetOwningPlayerPawn());
 	if (!Hero || !Hero->AttributeSet) return;
+
+	BindAttributeDelegates(Hero); // 🌟 只绑一次，之后装备/升级一改属性面板就自动刷新
 
 	const UEOB_AttributeSet* AS = Hero->AttributeSet;
 	UEOB_LevelComponent* LC = Hero->LevelComponent;
@@ -67,3 +97,45 @@ void UEOB_Widget_CharacterPanel::OnAddSTRClicked() { SpendPoint(EEOBStatType::St
 void UEOB_Widget_CharacterPanel::OnAddDEXClicked() { SpendPoint(EEOBStatType::Dexterity); }
 void UEOB_Widget_CharacterPanel::OnAddFOCClicked() { SpendPoint(EEOBStatType::Focus); }
 void UEOB_Widget_CharacterPanel::OnAddVITClicked() { SpendPoint(EEOBStatType::Vitality); }
+
+void UEOB_Widget_CharacterPanel::NativeDestruct()
+{
+	UnbindAttributeDelegates();
+	Super::NativeDestruct();
+}
+
+void UEOB_Widget_CharacterPanel::BindAttributeDelegates(AEmpireOfBossCharacter* Hero)
+{
+	if (bDelegatesBound || !Hero || !Hero->AbilitySystemComponent) return;
+
+	UAbilitySystemComponent* ASC = Hero->AbilitySystemComponent;
+	for (const FGameplayAttribute& Attr : GetWatchedAttributes())
+	{
+		ASC->GetGameplayAttributeValueChangeDelegate(Attr).AddUObject(
+			this, &UEOB_Widget_CharacterPanel::OnWatchedAttributeChanged);
+	}
+
+	BoundASC = ASC;
+	bDelegatesBound = true;
+}
+
+void UEOB_Widget_CharacterPanel::UnbindAttributeDelegates()
+{
+	if (!bDelegatesBound) return;
+
+	// ⚠️ 必须解绑：ASC 比 Widget 活得久，不解绑的话 Widget 销毁后回调打到野指针直接崩
+	if (UAbilitySystemComponent* ASC = BoundASC.Get())
+	{
+		for (const FGameplayAttribute& Attr : GetWatchedAttributes())
+		{
+			ASC->GetGameplayAttributeValueChangeDelegate(Attr).RemoveAll(this);
+		}
+	}
+	BoundASC = nullptr;
+	bDelegatesBound = false;
+}
+
+void UEOB_Widget_CharacterPanel::OnWatchedAttributeChanged(const FOnAttributeChangeData& Data)
+{
+	RefreshFromHero();
+}
