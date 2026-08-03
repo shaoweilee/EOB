@@ -4,6 +4,7 @@
 #include "AbilitySystemGlobals.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/OverlapResult.h"
+#include "NavigationSystem.h"
 #include "EOPBaseCharacter.h"
 #include "EOB_AttributeSet.h"
 #include "MyGameplayTagsLibrary.h"
@@ -42,21 +43,47 @@ bool UEOB_GameplayAbility::GetCursorGroundPoint(FVector& OutPoint) const
 		return false;
 	}
 
-	// 🌟 二次修正：光标射线可能先打到树冠/屋顶/高台边沿（Z 悬空）。
-	//    在命中点 XY 处从高空垂直下扫，取与英雄高度最接近的表面作为真实落点。
-	const AActor* Avatar = GetAvatarActorFromActorInfo();
-	const float RefZ = Avatar ? Avatar->GetActorLocation().Z : CursorHit.ImpactPoint.Z;
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+	UWorld* World = Avatar ? Avatar->GetWorld() : nullptr;
+	const FVector HeroLoc = Avatar ? Avatar->GetActorLocation() : CursorHit.ImpactPoint;
 
+	// ① 限制瞄准距离：光标点中 Z=2400 的远景山体时，把落点拉回英雄身边 MaxAimDistance 以内
+	FVector AimPoint = CursorHit.ImpactPoint;
+	{
+		FVector Flat = AimPoint - HeroLoc;
+		Flat.Z = 0.f;
+		const float FlatLen = Flat.Size();
+		if (FlatLen > MaxAimDistance)
+		{
+			AimPoint = HeroLoc + Flat.GetSafeNormal() * MaxAimDistance; // Z 自动变成英雄高度
+		}
+	}
+
+	// ② 优先投影到导航网格：怪物在哪条路上走，技能就落在哪条路上。
+	//    这一步同时解决"点中树冠/屋顶/高台边沿导致 Z 悬空"——导航网格只存在于可行走地面上。
+	if (World)
+	{
+		if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
+		{
+			FNavLocation NavLoc;
+			if (NavSys->ProjectPointToNavigation(AimPoint, NavLoc, FVector(300.f, 300.f, 4000.f)))
+			{
+				OutPoint = NavLoc.Location;
+				return true;
+			}
+		}
+	}
+
+	// ③ 导航投影失败（指向没有导航网格的区域）：退回垂直下扫，取与英雄高度最接近的表面
+	const float RefZ = HeroLoc.Z;
 	TArray<FHitResult> Hits;
-	const FVector SkyStart(CursorHit.ImpactPoint.X, CursorHit.ImpactPoint.Y, RefZ + 5000.f);
-	const FVector SkyEnd(CursorHit.ImpactPoint.X, CursorHit.ImpactPoint.Y, RefZ - 5000.f);
+	const FVector SkyStart(AimPoint.X, AimPoint.Y, RefZ + 5000.f);
+	const FVector SkyEnd(AimPoint.X, AimPoint.Y, RefZ - 5000.f);
 	FCollisionQueryParams Params;
 	if (Avatar)
 	{
-		Params.AddIgnoredActor(const_cast<AActor*>(Avatar));
+		Params.AddIgnoredActor(Avatar);
 	}
-
-	UWorld* World = Avatar ? Avatar->GetWorld() : nullptr;
 	if (World && World->LineTraceMultiByChannel(Hits, SkyStart, SkyEnd, ECC_GameTraceChannel2, Params) && Hits.Num() >
 		0)
 	{
@@ -72,8 +99,8 @@ bool UEOB_GameplayAbility::GetCursorGroundPoint(FVector& OutPoint) const
 		return true;
 	}
 
-	// 垂直扫不到任何东西（比如光标悬在深渊上方），退回原始命中点
-	OutPoint = CursorHit.ImpactPoint;
+	// ④ 什么都探不到（光标悬在深渊上方）：用限距后的 XY，高度取英雄脚下
+	OutPoint = FVector(AimPoint.X, AimPoint.Y, HeroLoc.Z);
 	return true;
 }
 
@@ -103,8 +130,6 @@ TArray<AActor*> UEOB_GameplayAbility::ApplyDamageFan(float Radius, float HalfAng
 	AActor* Avatar = GetAvatarActorFromActorInfo();
 	if (!Avatar) return HitActors;
 
-	// 扇形 = 以自己为圆心、按朝向过滤角度的落点伤害
-	// 直接在下方核心逻辑里处理角度过滤
 	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
 	if (!SourceASC || !DamageEffectClass) return HitActors;
 

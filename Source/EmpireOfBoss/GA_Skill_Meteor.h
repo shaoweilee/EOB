@@ -24,9 +24,6 @@ public:
 	float ImpactDelay = 1.f;
 
 private:
-	UFUNCTION()
-	void MeteorStrike();
-
-	FVector PendingStrikePoint = FVector::ZeroVector;
 	FTimerHandle StrikeTimerHandle;
+	FVector PendingStrikePoint = FVector::ZeroVector;
 };

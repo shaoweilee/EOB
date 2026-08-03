@@ -28,6 +28,11 @@ void AEOB_Projectile::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// 🌟 兜底：蓝图上误把根球体改成 NoCollision 时，运行时强制改回。
+	//    根球体没碰撞 = 重叠检测全废 = 火球永远打不到人（你这次就是踩的这个坑）。
+	Sphere->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
+	Sphere->SetGenerateOverlapEvents(true);
+
 	Sphere->OnComponentBeginOverlap.AddDynamic(this, &AEOB_Projectile::OnSphereOverlap);
 	SetLifeSpan(LifeTime);
 }
@@ -51,7 +56,7 @@ void AEOB_Projectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComp, AActo
 
 	UE_LOG(LogTemp, Warning, TEXT("[火球] 碰到了：%s"), *OtherActor->GetName());
 
-	// 碰到有 GAS 的敌人 → 爆炸；碰到其他东西（墙/箱子）→ 直接湮灭
+	// 碰到有 GAS 的敌人 → 爆炸；碰到其他东西（墙/箱子/地面）→ 直接湮灭
 	UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(OtherActor);
 	if (TargetASC && !TargetASC->HasMatchingGameplayTag(FMyGameplayTags::State_Dead))
 	{

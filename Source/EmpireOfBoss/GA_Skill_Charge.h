@@ -25,13 +25,4 @@ public:
 	/** 冲刺时长（秒），越短越"炸" */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "EOB|Skill")
 	float DashDuration = 0.15f;
-
-private:
-	/** 冲刺逐帧位移（定时器驱动） */
-	void DashTick();
-
-	FTimerHandle DashTimerHandle;
-	FVector DashStart = FVector::ZeroVector;
-	FVector DashDest = FVector::ZeroVector;
-	float DashElapsed = 0.f;
 };

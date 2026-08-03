@@ -22,6 +22,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "EOB|Skill")
 	TSubclassOf<UGameplayEffect> DamageEffectClass;
 
+	/** 鼠标瞄准最大距离（厘米）。防止技能落在十万八千里外的背景山体上 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "EOB|Skill")
+	float MaxAimDistance = 1500.f;
+
 protected:
 	/** 让释放者转向鼠标指向的地面点 */
 	void RotateAvatarToCursor() const;
