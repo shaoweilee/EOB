@@ -87,6 +87,9 @@ public:
 	// 🌟 核心性能优化：缓存上一次射线扫到的敌人指针，避免每帧高频重复调用 UI 逻辑
 	UPROPERTY()
 	TWeakObjectPtr<AActor> LastHoveredEnemy;
+	
+	/** 本次按下是否点在敌人身上（是则松开/长按时不发地面寻路，防止攻击完还往怪身上贴） */
+	bool bPressedOnEnemy = false;
 
 	// 🌟 辅助函数：负责每帧检测并切换血条显示状态
 	void CheckEnemyHoverUnderCursor();

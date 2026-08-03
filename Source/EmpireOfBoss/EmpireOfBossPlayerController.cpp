@@ -120,6 +120,7 @@ void AEmpireOfBossPlayerController::OnInputStarted()
 		// 标记为攻击意图
 		MyHero->CurrentTarget = EnemyTarget;
 		MyHero->bIsTryingToAttack = true;
+		bPressedOnEnemy = true; // 🌟 本次按压点在敌人身上，松手时不发地面寻路
 
 		// 可选：在这里播放一个点击目标的特效
 		return;
@@ -134,6 +135,7 @@ void AEmpireOfBossPlayerController::OnInputStarted()
 			// 点到宝箱了！清空攻击意图
 			MyHero->bIsTryingToAttack = false;
 			MyHero->CurrentTarget = nullptr;
+			bPressedOnEnemy = false; // 🌟 交互组件自己会寻路，但也别走 Released 的地面寻路
 
 			// 🌟 直接 return！彻底放权给宝箱的 InteractableComponent::OnOwnerClicked 去处理它的 SimpleMoveToActor。
 			// 这样控制器就不会用普通地面的 SimpleMoveToLocation 去掐断组件的寻路了！
@@ -144,6 +146,7 @@ void AEmpireOfBossPlayerController::OnInputStarted()
 	// 2. 如果没点到敌人，清空攻击意图，执行原有逻辑
 	MyHero->bIsTryingToAttack = false;
 	MyHero->CurrentTarget = nullptr;
+	bPressedOnEnemy = false; // 🌟 这次按压是点地面
 
 	// 🌟 核心修正：点到树木/墙壁时，立刻让射线走 ECC_GameTraceChannel2 专线击穿它们，落锁到地面！
 	FHitResult GroundHit;
@@ -166,6 +169,12 @@ void AEmpireOfBossPlayerController::OnInputStarted()
 
 void AEmpireOfBossPlayerController::OnSetDestinationTriggered()
 {
+	// 🌟 点在敌人身上的按压：长按也不做跟随移动，追击交给 CheckAttackRangeAndExecute
+	if (bPressedOnEnemy)
+	{
+		FollowTime = 0.f;
+		return;
+	}
 	// We flag that the input is being pressed
 	FollowTime += GetWorld()->GetDeltaSeconds();
 
@@ -194,6 +203,14 @@ void AEmpireOfBossPlayerController::OnSetDestinationTriggered()
 
 void AEmpireOfBossPlayerController::OnSetDestinationReleased()
 {
+	// 🌟 点在敌人身上的按压：松开不发 SimpleMoveToLocation，否则攻击完角色还会往怪脚上贴
+	if (bPressedOnEnemy)
+	{
+		bPressedOnEnemy = false;
+		FollowTime = 0.f;
+		return;
+	}
+
 	// 如果按住的时间非常短，判定为标准的“暗黑流点击走位”
 	if (FollowTime <= ShortPressThreshold)
 	{
@@ -372,6 +389,7 @@ void AEmpireOfBossPlayerController::OnToggleInventory()
 		EOBHUDWidget->ToggleInventoryPanels();
 	}
 }
+
 void AEmpireOfBossPlayerController::OnToggleCharacter()
 {
 	if (EOBHUDWidget)

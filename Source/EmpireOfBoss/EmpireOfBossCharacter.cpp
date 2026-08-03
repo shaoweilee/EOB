@@ -178,8 +178,8 @@ void AEmpireOfBossCharacter::CheckAttackRangeAndExecute()
 
 	float Distance = FVector::Dist(GetActorLocation(), CurrentTarget->GetActorLocation());
 
-	// 如果距离小于 200cm (2米)
-	if (Distance <= 200.f)
+	// 如果距离小于 180cm
+	if (Distance <= 180.f)
 	{
 		// 1. 停止移动
 		GetCharacterMovement()->StopMovementImmediately();
@@ -191,7 +191,6 @@ void AEmpireOfBossCharacter::CheckAttackRangeAndExecute()
 
 		// 3. 执行攻击
 		PerformMeleeAttack(); // 播放蒙太奇
-		bIsTryingToAttack = false; // 重置状态
 	}
 	else
 	{

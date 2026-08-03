@@ -9,7 +9,33 @@ class UDataTable;
 class UAbilitySystemComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChangedSignature);
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnEquipmentChangedSignature);
+
+class UGameplayEffect;
+
+/**
+ * M3a 补丁：四维词缀的派生加成规则
+ * 当词缀加的属性 = SourceAttribute 时，额外施加 DerivedGE，
+ * 数值 = 词缀数值 × Multiplier（TL2：装备给的属性同样提供派生加成）
+ */
+USTRUCT(BlueprintType)
+struct FEOBDerivedAffixRule
+{
+	GENERATED_BODY()
+
+	/** 词缀加的是这个属性时触发（如 EOB_AttributeSet.Strength） */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Inventory")
+	FGameplayAttribute SourceAttribute;
+
+	/** 额外施加的 GE（Infinite，修饰符用 SetByCaller 读 Data.AffixMagnitude） */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Inventory")
+	TSubclassOf<UGameplayEffect> DerivedGE;
+
+	/** 派生数值 = 词缀数值 × 倍数 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Inventory")
+	float Multiplier = 1.f;
+};
 
 /**
  * 背包与装备组件：挂在主角身上。
@@ -32,6 +58,10 @@ public:
 	/** 词缀池（DataTable，行结构 EOBAffixTableRow） */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Inventory")
 	TObjectPtr<UDataTable> AffixTable;
+	
+	/** M3a 补丁：四维词缀的派生加成规则表（在英雄蓝图的组件默认值里配置 8 行） */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Inventory")
+	TArray<FEOBDerivedAffixRule> DerivedAffixRules;
 
 	/** 背包格子（固定长度，UI 直接遍历它） */
 	UPROPERTY(BlueprintReadOnly, Category = "EOB|Inventory")

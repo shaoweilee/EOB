@@ -190,22 +190,39 @@ void UEOB_InventoryComponent::ApplyItemEffects(FEOBItemInstance& Item)
 	TArray<FEOBAffixValue> AllAffixes = Item.Definition->BaseAffixes;
 	AllAffixes.Append(Item.RolledAffixes);
 
-	for (const FEOBAffixValue& Affix : AllAffixes)
+	// 小工具：打一个 GE，数值走 SetByCaller，句柄记到装备上（卸下时统一移除）
+	auto ApplyAffixGE = [&](TSubclassOf<UGameplayEffect> GEClass, float Magnitude)
 	{
-		if (!Affix.GEClass) continue;
+		if (!GEClass) return;
 
 		FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
 		Context.AddSourceObject(Item.Definition);
-		FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(Affix.GEClass, 1.f, Context);
-		if (!SpecHandle.IsValid()) continue;
+		FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(GEClass, 1.f, Context);
+		if (!SpecHandle.IsValid()) return;
 
-		// 🌟 把 roll 出的数值塞进 SetByCaller，GE 蓝图里用 Data.AffixMagnitude 读
-		SpecHandle.Data.Get()->SetSetByCallerMagnitude(FMyGameplayTags::Data_AffixMagnitude, Affix.Value);
+		// 🌟 把数值塞进 SetByCaller，GE 蓝图里用 Data.AffixMagnitude 读
+		SpecHandle.Data.Get()->SetSetByCallerMagnitude(FMyGameplayTags::Data_AffixMagnitude, Magnitude);
 
 		const FActiveGameplayEffectHandle Handle = ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
 		if (Handle.WasSuccessfullyApplied())
 		{
 			Item.AppliedEffectHandles.Add(Handle);
+		}
+	};
+
+	for (const FEOBAffixValue& Affix : AllAffixes)
+	{
+		// 1. 词缀本体
+		ApplyAffixGE(Affix.GEClass, Affix.Value);
+
+		// 2. 🌟 M3a 补丁：TL2 还原——词缀加四维时，同步施加派生加成
+		//    （装备给的属性也是属性值本身，就该提供暴击/闪避/暴伤等加成）
+		for (const FEOBDerivedAffixRule& Rule : DerivedAffixRules)
+		{
+			if (Rule.SourceAttribute == Affix.Attribute)
+			{
+				ApplyAffixGE(Rule.DerivedGE, Affix.Value * Rule.Multiplier);
+			}
 		}
 	}
 }
