@@ -46,10 +46,32 @@ protected:
 	/** M2: 背包开合按键 */
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* ToggleInventoryAction;
-	
+
 	/** M3a: 角色面板开合按键 */
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* ToggleCharacterAction;
+
+	/** M3b: 技能树开合按键（K） */
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* ToggleSkillTreeAction;
+
+	/** M3b: 技能快捷键 1~4（直放已学列表第 N 个，并设为右键当前技能） */
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* Skill1Action;
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* Skill2Action;
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* Skill3Action;
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* Skill4Action;
+
+	/** M3b: 右键放当前技能 */
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* CastCurrentSkillAction;
+
+	/** M3b: Tab 循环切换右键当前技能 */
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* CycleSkillAction;
 
 	/** True if the controlled character should navigate to the mouse cursor. */
 	uint32 bMoveToMouseCursor : 1;
@@ -87,7 +109,7 @@ public:
 	// 🌟 核心性能优化：缓存上一次射线扫到的敌人指针，避免每帧高频重复调用 UI 逻辑
 	UPROPERTY()
 	TWeakObjectPtr<AActor> LastHoveredEnemy;
-	
+
 	/** 本次按下是否点在敌人身上（是则松开/长按时不发地面寻路，防止攻击完还往怪身上贴） */
 	bool bPressedOnEnemy = false;
 
@@ -115,4 +137,14 @@ protected:
 	AActor* GetTargetUnderCursor();
 	void OnToggleInventory();
 	void OnToggleCharacter();
+
+	void OnToggleSkillTree();
+	void OnSkill1();
+	void OnSkill2();
+	void OnSkill3();
+	void OnSkill4();
+	void OnCastCurrentSkill();
+	void OnCycleSkill();
+	/** 放第 SlotIndex 个已学技能（成功则同步为右键当前技能） */
+	void CastSkillAtSlot(int32 SlotIndex);
 };

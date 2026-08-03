@@ -8,6 +8,8 @@
 
 class UEOB_InventoryComponent;
 class UEOB_LevelComponent;
+class UEOB_SkillTreeComponent;
+class UGameplayEffect;
 
 /**
  *  A controllable top-down perspective character
@@ -76,6 +78,14 @@ public:
 	/** M3a 新增：经验/升级/属性点组件 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "EOB|Level")
 	TObjectPtr<UEOB_LevelComponent> LevelComponent;
+
+	/** M3b 新增：技能树组件 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "EOB|Skill")
+	TObjectPtr<UEOB_SkillTreeComponent> SkillTreeComponent;
+
+	/** M3b 新增：出生即常驻的被动 GE（如回蓝），英雄蓝图默认值里配置 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|GAS")
+	TArray<TSubclassOf<UGameplayEffect>> PassiveEffects;
 
 	/** 开启/关闭穿怪状态 */
 	UFUNCTION(BlueprintCallable, Category = "EOB|Combat")

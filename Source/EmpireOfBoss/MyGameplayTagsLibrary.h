@@ -27,6 +27,16 @@ public:
 	static FGameplayTag Data_AffixMagnitude;
 	// M3a 新增：本次伤害是否暴击的 SetByCaller 标记
 	static FGameplayTag Data_IsCrit;
+	// M3b 新增：技能冷却标签 + 战吼 Buff 标签
+	static FGameplayTag Cooldown_Skill_MeleeSmash;
+	static FGameplayTag Cooldown_Skill_Whirlwind;
+	static FGameplayTag Cooldown_Skill_Fireball;
+	static FGameplayTag Cooldown_Skill_FlameStorm;
+	static FGameplayTag Cooldown_Skill_Meteor;
+	static FGameplayTag Cooldown_Skill_WarCry;
+	static FGameplayTag Cooldown_Skill_Charge;
+	static FGameplayTag Cooldown_Skill_Earthquake;
+	static FGameplayTag Buff_WarCry;
 };
 
 UCLASS()

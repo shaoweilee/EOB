@@ -10,6 +10,7 @@ class UProgressBar;
 class UEOB_Widget_Inventory;
 class UEOB_Widget_EquipmentPanel;
 class UEOB_Widget_CharacterPanel;
+class UEOB_Widget_SkillTree;
 
 UCLASS()
 class EMPIREOFBOSS_API UEOB_HUDWidget : public UUserWidget
@@ -44,7 +45,7 @@ public: /** 🌟 C++ 核心事件：当血量或蓝量改变时，C++ 呼叫这�
 	/** 开关背包和装备面板（由 PlayerController 的 I 键触发） */
 	UFUNCTION(BlueprintCallable, Category = "EOB|UI")
 	void ToggleInventoryPanels();
-	
+
 	/** M3a：开关角色面板（C 键） */
 	UFUNCTION(BlueprintCallable, Category = "EOB|UI")
 	void ToggleCharacterPanel();
@@ -54,6 +55,13 @@ public: /** 🌟 C++ 核心事件：当血量或蓝量改变时，C++ 呼叫这�
 
 	/** M3a：若角色面板开着则刷新（加点/升级后呼叫） */
 	void RefreshCharacterPanel();
+
+	/** M3b：开关技能树面板（K 键） */
+	UFUNCTION(BlueprintCallable, Category = "EOB|UI")
+	void ToggleSkillTreePanel();
+
+	/** M3b：若技能树面板开着则刷新（学习技能后呼叫） */
+	void RefreshSkillTreePanel();
 
 protected:
 	/** 在 HUD 蓝图默认值里选你的 WBP_Inventory / WBP_EquipmentPanel */
@@ -68,7 +76,7 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<UEOB_Widget_EquipmentPanel> EquipmentPanel;
-	
+
 	// ===================== M3a：角色面板（Synty UI 没有，自建） =====================
 	/** 在 HUD 蓝图默认值里选你的 WBP_CharacterPanel */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
@@ -76,4 +84,11 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<UEOB_Widget_CharacterPanel> CharacterPanel;
+
+	// ===================== M3b：技能树面板 =====================
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
+	TSubclassOf<UEOB_Widget_SkillTree> SkillTreePanelClass;
+
+	UPROPERTY()
+	TObjectPtr<UEOB_Widget_SkillTree> SkillTreePanel;
 };

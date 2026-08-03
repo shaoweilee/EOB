@@ -16,6 +16,8 @@
 #include "EOB_AttributeSet.h"
 #include "EOB_HUDWidget.h"
 #include "GameplayEffectTypes.h" // 引入 GAS 结构体依赖
+#include "EOB_SkillTreeComponent.h"
+#include "EOB_GameplayAbility.h"
 
 AEmpireOfBossPlayerController::AEmpireOfBossPlayerController()
 {
@@ -99,6 +101,22 @@ void AEmpireOfBossPlayerController::SetupInputComponent()
 			// M3a: 角色面板开合
 			EnhancedInputComponent->BindAction(ToggleCharacterAction, ETriggerEvent::Started, this,
 			                                   &AEmpireOfBossPlayerController::OnToggleCharacter);
+
+			// M3b: 技能树开合 + 技能快捷键 + 右键当前技能 + Tab 切换
+			EnhancedInputComponent->BindAction(ToggleSkillTreeAction, ETriggerEvent::Started, this,
+			                                   &AEmpireOfBossPlayerController::OnToggleSkillTree);
+			EnhancedInputComponent->BindAction(Skill1Action, ETriggerEvent::Started, this,
+			                                   &AEmpireOfBossPlayerController::OnSkill1);
+			EnhancedInputComponent->BindAction(Skill2Action, ETriggerEvent::Started, this,
+			                                   &AEmpireOfBossPlayerController::OnSkill2);
+			EnhancedInputComponent->BindAction(Skill3Action, ETriggerEvent::Started, this,
+			                                   &AEmpireOfBossPlayerController::OnSkill3);
+			EnhancedInputComponent->BindAction(Skill4Action, ETriggerEvent::Started, this,
+			                                   &AEmpireOfBossPlayerController::OnSkill4);
+			EnhancedInputComponent->BindAction(CastCurrentSkillAction, ETriggerEvent::Started, this,
+			                                   &AEmpireOfBossPlayerController::OnCastCurrentSkill);
+			EnhancedInputComponent->BindAction(CycleSkillAction, ETriggerEvent::Started, this,
+			                                   &AEmpireOfBossPlayerController::OnCycleSkill);
 		}
 		else
 		{
@@ -395,5 +413,45 @@ void AEmpireOfBossPlayerController::OnToggleCharacter()
 	if (EOBHUDWidget)
 	{
 		EOBHUDWidget->ToggleCharacterPanel();
+	}
+}
+
+void AEmpireOfBossPlayerController::OnToggleSkillTree()
+{
+	if (EOBHUDWidget)
+	{
+		EOBHUDWidget->ToggleSkillTreePanel();
+	}
+}
+
+void AEmpireOfBossPlayerController::CastSkillAtSlot(int32 SlotIndex)
+{
+	if (!MyHero || !MyHero->SkillTreeComponent || !MyHero->AbilitySystemComponent) return;
+
+	if (TSubclassOf<UGameplayAbility> AbilityClass =
+		MyHero->SkillTreeComponent->GetLearnedAbilityAt(SlotIndex))
+	{
+		// 直放的同时设为右键当前技能（TL2 手感）
+		MyHero->SkillTreeComponent->CurrentSkillSlot = SlotIndex;
+		MyHero->AbilitySystemComponent->TryActivateAbilityByClass(AbilityClass);
+	}
+}
+
+void AEmpireOfBossPlayerController::OnSkill1() { CastSkillAtSlot(0); }
+void AEmpireOfBossPlayerController::OnSkill2() { CastSkillAtSlot(1); }
+void AEmpireOfBossPlayerController::OnSkill3() { CastSkillAtSlot(2); }
+void AEmpireOfBossPlayerController::OnSkill4() { CastSkillAtSlot(3); }
+
+void AEmpireOfBossPlayerController::OnCastCurrentSkill()
+{
+	if (!MyHero || !MyHero->SkillTreeComponent) return;
+	CastSkillAtSlot(MyHero->SkillTreeComponent->CurrentSkillSlot);
+}
+
+void AEmpireOfBossPlayerController::OnCycleSkill()
+{
+	if (MyHero && MyHero->SkillTreeComponent)
+	{
+		MyHero->SkillTreeComponent->CycleCurrentSkill();
 	}
 }

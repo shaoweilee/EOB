@@ -20,6 +20,8 @@
 #include "EOB_InventoryComponent.h"
 #include "EOB_AttributeSet.h"
 #include "EOB_LevelComponent.h"
+#include "EOB_SkillTreeComponent.h"
+#include "GameplayEffect.h"
 
 AEmpireOfBossCharacter::AEmpireOfBossCharacter()
 {
@@ -65,13 +67,28 @@ AEmpireOfBossCharacter::AEmpireOfBossCharacter()
 
 	// M3a 新增：经验/升级/属性点组件
 	LevelComponent = CreateDefaultSubobject<UEOB_LevelComponent>(TEXT("LevelComponent"));
+
+	// M3b 新增：技能树组件
+	SkillTreeComponent = CreateDefaultSubobject<UEOB_SkillTreeComponent>(TEXT("SkillTreeComponent"));
 }
 
 void AEmpireOfBossCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// stub
+	// M3b 新增：出生即挂上被动 GE（回蓝等）
+	if (AbilitySystemComponent)
+	{
+		for (const TSubclassOf<UGameplayEffect>& GE : PassiveEffects)
+		{
+			if (GE)
+			{
+				FGameplayEffectContextHandle Context = AbilitySystemComponent->MakeEffectContext();
+				Context.AddInstigator(this, this);
+				AbilitySystemComponent->ApplyGameplayEffectToSelf(GE.GetDefaultObject(), 1.f, Context);
+			}
+		}
+	}
 }
 
 void AEmpireOfBossCharacter::Tick(float DeltaSeconds)

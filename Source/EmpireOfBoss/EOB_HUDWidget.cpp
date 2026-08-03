@@ -6,6 +6,7 @@
 #include "EmpireOfBossCharacter.h"
 #include "EOB_LevelComponent.h"
 #include "TimerManager.h"
+#include "EOB_Widget_SkillTree.h"
 
 void UEOB_HUDWidget::NativeConstruct()
 {
@@ -46,6 +47,16 @@ void UEOB_HUDWidget::NativeConstruct()
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().SetTimerForNextTick(this, &UEOB_HUDWidget::RefreshXPDisplay);
+	}
+	// M3b：技能树面板，默认隐藏
+	if (SkillTreePanelClass && !SkillTreePanel)
+	{
+		SkillTreePanel = CreateWidget<UEOB_Widget_SkillTree>(this, SkillTreePanelClass);
+		if (SkillTreePanel)
+		{
+			SkillTreePanel->AddToViewport();
+			SkillTreePanel->SetVisibility(ESlateVisibility::Collapsed);
+		}
 	}
 }
 
@@ -97,5 +108,30 @@ void UEOB_HUDWidget::RefreshCharacterPanel()
 	if (CharacterPanel && CharacterPanel->IsVisible())
 	{
 		CharacterPanel->RefreshFromHero();
+	}
+}
+
+void UEOB_HUDWidget::ToggleSkillTreePanel()
+{
+	if (!SkillTreePanel) return;
+
+	const bool bNowVisible = SkillTreePanel->IsVisible();
+	// 🌟 穿透的教训：打开用 SelfHitTestInvisible
+	const ESlateVisibility NewVis = bNowVisible
+		                                ? ESlateVisibility::Collapsed
+		                                : ESlateVisibility::SelfHitTestInvisible;
+	SkillTreePanel->SetVisibility(NewVis);
+
+	if (NewVis == ESlateVisibility::SelfHitTestInvisible)
+	{
+		SkillTreePanel->RefreshTree();
+	}
+}
+
+void UEOB_HUDWidget::RefreshSkillTreePanel()
+{
+	if (SkillTreePanel && SkillTreePanel->IsVisible())
+	{
+		SkillTreePanel->RefreshTree();
 	}
 }
