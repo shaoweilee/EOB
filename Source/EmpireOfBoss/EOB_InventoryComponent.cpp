@@ -210,13 +210,17 @@ void UEOB_InventoryComponent::ApplyItemEffects(FEOBItemInstance& Item)
 		}
 	};
 
+	UE_LOG(LogTemp, Warning, TEXT("════ [装备] %s（%d 条词缀）════"),
+	       *Item.Definition->ItemName.ToString(), AllAffixes.Num());
+
 	for (const FEOBAffixValue& Affix : AllAffixes)
 	{
 		// 1. 词缀本体
 		ApplyAffixGE(Affix.GEClass, Affix.Value);
 
+		UE_LOG(LogTemp, Warning, TEXT("      词缀: %s +%.1f"), *Affix.Attribute.GetName(), Affix.Value);
+
 		// 2. 🌟 M3a 补丁：TL2 还原——词缀加四维时，同步施加派生加成
-		//    （装备给的属性也是属性值本身，就该提供暴击/闪避/暴伤等加成）
 		for (const FEOBDerivedAffixRule& Rule : DerivedAffixRules)
 		{
 			if (Rule.SourceAttribute == Affix.Attribute)

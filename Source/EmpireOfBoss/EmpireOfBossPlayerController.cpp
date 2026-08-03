@@ -433,7 +433,11 @@ void AEmpireOfBossPlayerController::CastSkillAtSlot(int32 SlotIndex)
 	{
 		// 直放的同时设为右键当前技能（TL2 手感）
 		MyHero->SkillTreeComponent->CurrentSkillSlot = SlotIndex;
-		MyHero->AbilitySystemComponent->TryActivateAbilityByClass(AbilityClass);
+		const bool bActivated = MyHero->AbilitySystemComponent->TryActivateAbilityByClass(AbilityClass);
+		if (!bActivated)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[技能] 释放失败：冷却中或蓝不足"));
+		}
 	}
 }
 

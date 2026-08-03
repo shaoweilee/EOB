@@ -1,6 +1,7 @@
 #include "GA_Skill_Meteor.h"
 
 #include "TimerManager.h"
+#include "DrawDebugHelpers.h"
 
 void UGA_Skill_Meteor::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
                                        const FGameplayAbilityActorInfo* ActorInfo,
@@ -30,7 +31,10 @@ void UGA_Skill_Meteor::MeteorStrike()
 {
 	bool bIsCrit = false;
 	const float Damage = ComputeSkillDamage(DamageMultiplier, false, bIsCrit);
-	ApplyDamageAtLocation(PendingStrikePoint, Radius, Damage, false);
+	const TArray<AActor*> Hits = ApplyDamageAtLocation(PendingStrikePoint, Radius, Damage, false);
 
-	UE_LOG(LogTemp, Log, TEXT("[技能] 陨石落地！伤害 %.1f"), Damage);
+	// 橙色调试圈：落点 + 半径，存在 3 秒，验收完可删
+	DrawDebugSphere(GetWorld(), PendingStrikePoint, Radius, 24, FColor::Orange, false, 3.f);
+
+	UE_LOG(LogTemp, Warning, TEXT("[技能] 陨石落地！伤害 %.1f，命中 %d 个目标"), Damage, Hits.Num());
 }

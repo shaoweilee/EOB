@@ -49,6 +49,8 @@ void AEOB_Projectile::OnSphereOverlap(UPrimitiveComponent* OverlappedComp, AActo
 {
 	if (!OtherActor || OtherActor == GetInstigator() || OtherActor == GetOwner()) return;
 
+	UE_LOG(LogTemp, Warning, TEXT("[火球] 碰到了：%s"), *OtherActor->GetName());
+
 	// 碰到有 GAS 的敌人 → 爆炸；碰到其他东西（墙/箱子）→ 直接湮灭
 	UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(OtherActor);
 	if (TargetASC && !TargetASC->HasMatchingGameplayTag(FMyGameplayTags::State_Dead))
@@ -72,6 +74,7 @@ void AEOB_Projectile::Explode()
 		FCollisionShape Shape = FCollisionShape::MakeSphere(ExplodeRadius);
 		GetWorld()->OverlapMultiByChannel(Overlaps, GetActorLocation(), FQuat::Identity, ECC_Pawn, Shape);
 
+		int32 HitCount = 0;
 		for (const FOverlapResult& Result : Overlaps)
 		{
 			AActor* HitActor = Result.GetActor();
@@ -88,7 +91,9 @@ void AEOB_Projectile::Explode()
 			SpecHandle.Data.Get()->SetSetByCallerMagnitude(FMyGameplayTags::Data_Damage, Damage);
 			SpecHandle.Data.Get()->SetSetByCallerMagnitude(FMyGameplayTags::Data_IsCrit, bIsCrit ? 1.f : 0.f);
 			ASC->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data.Get(), TargetASC);
+			HitCount++;
 		}
+		UE_LOG(LogTemp, Warning, TEXT("[火球] 爆炸！命中 %d 个目标"), HitCount);
 	}
 
 	Destroy();

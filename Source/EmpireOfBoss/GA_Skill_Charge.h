@@ -12,9 +12,9 @@ class EMPIREOFBOSS_API UGA_Skill_Charge : public UEOB_GameplayAbility
 
 public:
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle,
-								 const FGameplayAbilityActorInfo* ActorInfo,
-								 const FGameplayAbilityActivationInfo ActivationInfo,
-								 const FGameplayEventData* TriggerEventData) override;
+	                             const FGameplayAbilityActorInfo* ActorInfo,
+	                             const FGameplayAbilityActivationInfo ActivationInfo,
+	                             const FGameplayEventData* TriggerEventData) override;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "EOB|Skill")
 	float DamageMultiplier = 1.5f;
@@ -22,4 +22,16 @@ public:
 	float ChargeDistance = 600.f;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "EOB|Skill")
 	float DamageRadius = 550.f;
+	/** 冲刺时长（秒），越短越"炸" */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "EOB|Skill")
+	float DashDuration = 0.15f;
+
+private:
+	/** 冲刺逐帧位移（定时器驱动） */
+	void DashTick();
+
+	FTimerHandle DashTimerHandle;
+	FVector DashStart = FVector::ZeroVector;
+	FVector DashDest = FVector::ZeroVector;
+	float DashElapsed = 0.f;
 };

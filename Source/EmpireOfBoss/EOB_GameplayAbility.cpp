@@ -36,13 +36,45 @@ bool UEOB_GameplayAbility::GetCursorGroundPoint(FVector& OutPoint) const
 	APlayerController* PC = CurrentActorInfo->PlayerController.Get();
 	if (!PC) return false;
 
-	FHitResult GroundHit;
-	if (PC->GetHitResultUnderCursor(ECC_GameTraceChannel2, false, GroundHit))
+	FHitResult CursorHit;
+	if (!PC->GetHitResultUnderCursor(ECC_GameTraceChannel2, false, CursorHit))
 	{
-		OutPoint = GroundHit.ImpactPoint;
+		return false;
+	}
+
+	// 🌟 二次修正：光标射线可能先打到树冠/屋顶/高台边沿（Z 悬空）。
+	//    在命中点 XY 处从高空垂直下扫，取与英雄高度最接近的表面作为真实落点。
+	const AActor* Avatar = GetAvatarActorFromActorInfo();
+	const float RefZ = Avatar ? Avatar->GetActorLocation().Z : CursorHit.ImpactPoint.Z;
+
+	TArray<FHitResult> Hits;
+	const FVector SkyStart(CursorHit.ImpactPoint.X, CursorHit.ImpactPoint.Y, RefZ + 5000.f);
+	const FVector SkyEnd(CursorHit.ImpactPoint.X, CursorHit.ImpactPoint.Y, RefZ - 5000.f);
+	FCollisionQueryParams Params;
+	if (Avatar)
+	{
+		Params.AddIgnoredActor(const_cast<AActor*>(Avatar));
+	}
+
+	UWorld* World = Avatar ? Avatar->GetWorld() : nullptr;
+	if (World && World->LineTraceMultiByChannel(Hits, SkyStart, SkyEnd, ECC_GameTraceChannel2, Params) && Hits.Num() >
+		0)
+	{
+		const FHitResult* Best = &Hits[0];
+		for (const FHitResult& H : Hits)
+		{
+			if (FMath::Abs(H.ImpactPoint.Z - RefZ) < FMath::Abs(Best->ImpactPoint.Z - RefZ))
+			{
+				Best = &H;
+			}
+		}
+		OutPoint = Best->ImpactPoint;
 		return true;
 	}
-	return false;
+
+	// 垂直扫不到任何东西（比如光标悬在深渊上方），退回原始命中点
+	OutPoint = CursorHit.ImpactPoint;
+	return true;
 }
 
 float UEOB_GameplayAbility::ComputeSkillDamage(float DamageMultiplier, bool bCanCrit, bool& bOutIsCrit) const
