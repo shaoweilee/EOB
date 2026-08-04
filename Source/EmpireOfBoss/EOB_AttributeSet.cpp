@@ -36,7 +36,15 @@ void UEOB_AttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
 		SetHealth(FMath::Clamp(GetHealth(), 0.f, GetMaxHealth()));
 	}
 
-	// 2. 处理怪物攻击（伤害灌进 IncomingDamage 伤害池）
+	// 2. 🌟 钳制法力基础值：回蓝 GE 是周期性 Instant，直接加在 Base 上，
+	//    PreAttributeChange 只钳当前值不钳基础值，不在这里钳住的话，
+	//    Base 会无限膨胀，导致耗蓝 -10 被"存"在溢出部分里，面板永远显示满蓝
+	if (Data.EvaluatedData.Attribute == GetManaAttribute())
+	{
+		SetMana(FMath::Clamp(GetMana(), 0.f, GetMaxMana()));
+	}
+
+	// 3. 处理怪物攻击（伤害灌进 IncomingDamage 伤害池）
 	if (Data.EvaluatedData.Attribute == GetIncomingDamageAttribute())
 	{
 		const float LocalIncomingDamage = GetIncomingDamage();
