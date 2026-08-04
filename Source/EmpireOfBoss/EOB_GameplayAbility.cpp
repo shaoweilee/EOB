@@ -74,7 +74,22 @@ bool UEOB_GameplayAbility::GetCursorGroundPoint(FVector& OutPoint) const
 		}
 	}
 
-	// ③ 导航投影失败（指向没有导航网格的区域）：退回垂直下扫，取与英雄高度最接近的表面
+	// ③ 瞄准点不在可行走区域（背景山体/深渊）：退而求其次，落在英雄自己脚下，
+	//    至少砸在面前，而不是飞到 Z=2400 的半山腰上
+	if (World)
+	{
+		if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
+		{
+			FNavLocation NavLoc;
+			if (NavSys->ProjectPointToNavigation(HeroLoc, NavLoc, FVector(300.f, 300.f, 4000.f)))
+			{
+				OutPoint = NavLoc.Location;
+				return true;
+			}
+		}
+	}
+
+	// ④ 连英雄脚下都没有导航网格（不该发生）：退回垂直下扫，取与英雄高度最接近的表面
 	const float RefZ = HeroLoc.Z;
 	TArray<FHitResult> Hits;
 	const FVector SkyStart(AimPoint.X, AimPoint.Y, RefZ + 5000.f);
@@ -99,7 +114,7 @@ bool UEOB_GameplayAbility::GetCursorGroundPoint(FVector& OutPoint) const
 		return true;
 	}
 
-	// ④ 什么都探不到（光标悬在深渊上方）：用限距后的 XY，高度取英雄脚下
+	// ⑤ 什么都探不到：用限距后的 XY，高度取英雄脚下
 	OutPoint = FVector(AimPoint.X, AimPoint.Y, HeroLoc.Z);
 	return true;
 }

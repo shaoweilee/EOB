@@ -28,9 +28,15 @@ void AEOB_Projectile::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 🌟 兜底：蓝图上误把根球体改成 NoCollision 时，运行时强制改回。
-	//    根球体没碰撞 = 重叠检测全废 = 火球永远打不到人（你这次就是踩的这个坑）。
-	Sphere->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
+	// 🌟 碰撞三重保险（针对蓝图覆盖 + 自定义通道默认阻挡两个坑）：
+	//    1. 根球体必须是 OverlapAllDynamic（蓝图上已经改好）
+	// Sphere->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
+	//    2. OverlapAllDynamic 预设对项目自定义通道（HeroType/Enemy）默认是【阻挡】，
+	//       阻挡不产生重叠事件 → 火球撞怪毫无反应。这里强制全部通道改为重叠。
+	// Sphere->SetCollisionResponseToAllChannels(ECR_Overlap);
+	//    3. 唯独忽略主角（HeroType = GameTraceChannel1），免得出生瞬间和自己叠一下
+	// Sphere->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Ignore);
+
 	Sphere->SetGenerateOverlapEvents(true);
 
 	Sphere->OnComponentBeginOverlap.AddDynamic(this, &AEOB_Projectile::OnSphereOverlap);
