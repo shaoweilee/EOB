@@ -45,10 +45,7 @@ void ACPP_Enemy_Base::BeginPlay()
 		PC = Cast<AEmpireOfBossPlayerController>(GetWorld()->GetFirstPlayerController());
 
 
-		// FTimerHandle DummyHandle;
-		// GetWorldTimerManager().SetTimer(DummyHandle, this, &ACPP_Enemy_Base::InitHealthPercent,
-		//                                 0.11f, false);
-		GetWorldTimerManager().SetTimerForNextTick(this, &ACPP_Enemy_Base::InitHealthPercent);
+		// GetWorldTimerManager().SetTimerForNextTick(this, &ACPP_Enemy_Base::InitHealthPercent);
 
 		UE_LOG(LogTemp, Log, TEXT("[碰撞强刷]: 成功在 BeginPlay 中强行应用 EnemyCapsule 预设！"));
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetHealthAttribute()).AddUObject(
@@ -93,28 +90,23 @@ void ACPP_Enemy_Base::Tick(float DeltaTime)
 
 void ACPP_Enemy_Base::OnPlayerHealthChanged(const struct FOnAttributeChangeData& Data)
 {
-	UE_LOG(LogTemp, Warning, TEXT("---怪物扣血---"));
-	// Data.NewValue 就是扣血/加血后的最新值！
 	float CurrentHealth = Data.NewValue;
 	float MaxHealth = AttributeSet->GetMaxHealth();
 	float HealthPercent = MaxHealth > 0.f ? (CurrentHealth / MaxHealth) : 0.f;
 
-	if (PC && PC->EOBHUDWidget)
+	// 🌟 核心修复：共享血条同一时刻只属于"鼠标正悬停的那个敌人"
+	// 不是我，就别往上面写——否则打 A 指着 B 时血条必串
+	if (PC && PC->EOBHUDWidget && PC->LastHoveredEnemy.Get() == this)
 	{
-		UE_LOG(LogTemp, Log, TEXT("[UI 联动管道]: 检测到怪物血量发生改变！当前最新血量为: %.1f"), CurrentHealth);
 		PC->EOBHUDWidget->BP_UpdateEnemyHP(HealthPercent);
-	}
-}
 
-void ACPP_Enemy_Base::InitHealthPercent()
-{
-	float CurrentHealth = AttributeSet->GetHealth();
-	float MaxHealth = AttributeSet->GetMaxHealth();
-	UE_LOG(LogTemp, Warning, TEXT("---CurrentHealth: %f, MaxHealth: %f---"), CurrentHealth, MaxHealth);
-	float HealthPercent = MaxHealth > 0.f ? (CurrentHealth / MaxHealth) : 0.f;
-	if (PC && PC->EOBHUDWidget)
-	{
-		PC->EOBHUDWidget->BP_UpdateEnemyHP(HealthPercent);
+
+		FText HPText = FText::FormatNamed(
+			FText::FromString(TEXT("{CurrentHealth} / {MaxHealth}")),
+			TEXT("CurrentHealth"), FText::AsNumber(CurrentHealth), // int32 可以直接传
+			TEXT("MaxHealth"), FText::AsNumber(MaxHealth)
+		);
+		PC->EOBHUDWidget->BP_UpdateEnemyText(EnemyName, HPText);
 	}
 }
 

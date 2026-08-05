@@ -36,6 +36,9 @@ public: /** 🌟 C++ 核心事件：当血量或蓝量改变时，C++ 呼叫这�
 
 	UFUNCTION(BlueprintImplementableEvent)
 	void BP_UpdateEnemyHP(float HealthPercent);
+	
+	UFUNCTION(BlueprintImplementableEvent)
+	void BP_UpdateEnemyText(const FText& TextName, const FText& TextHealth);
 
 	UFUNCTION(BlueprintImplementableEvent)
 	void BP_UpdateXP(int CurrentXP, int MaxXP);

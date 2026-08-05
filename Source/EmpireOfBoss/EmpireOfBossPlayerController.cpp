@@ -3,6 +3,7 @@
 #include "EmpireOfBossPlayerController.h"
 
 #include "AbilitySystemComponent.h"
+#include "CPP_Enemy_Base.h"
 #include "GameFramework/Pawn.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
 #include "NiagaraFunctionLibrary.h"
@@ -369,33 +370,38 @@ void AEmpireOfBossPlayerController::PlayerTick(float DeltaTime)
 
 void AEmpireOfBossPlayerController::CheckEnemyHoverUnderCursor()
 {
-	// 如果 UI 还没有被 Subsystem 创建出来，直接返回安全过滤
 	if (!EOBHUDWidget) return;
-	// 检查鼠标下方物体是否是有效敌人（你的 CPP_Enemy_Base 已经自带了 Enemy 这个 Tag）
+
 	if (AActor* CurrentHoveredActor = GetTargetUnderCursor())
 	{
-		// 🌟 性能优化闭环：如果当前指的敌人和上一帧是同一个，不需要重复刷 UI
 		if (LastHoveredEnemy != CurrentHoveredActor)
 		{
 			LastHoveredEnemy = CurrentHoveredActor;
-
-			// 🌟 呼叫你在 EOB_HUDWidget.h 中写的蓝图事件，显示血条
 			EOBHUDWidget->ShowStateBar(ESlateVisibility::Visible);
 
-			// 💡 进阶：如果你以后想把这个敌人的名字或者精准血量百分比传给 UI 控件，
-			// 可以在这里获取 CurrentHoveredActor 的 AttributeSet，再传进 UI 刷新
+			// 🌟 核心修复：切悬停目标的瞬间，立刻拉取新敌人的真实血量刷血条
+			// 不再显示上一个敌人留下的残留值
+			if (ACPP_Enemy_Base* Enemy = Cast<ACPP_Enemy_Base>(CurrentHoveredActor))
+			{
+				const float MaxHP = Enemy->AttributeSet->GetMaxHealth();
+				const float CurrentHP = Enemy->AttributeSet->GetHealth();
+				const float Percent = MaxHP > 0.f ? Enemy->AttributeSet->GetHealth() / MaxHP : 0.f;
+				FText HPText = FText::FormatNamed(
+					FText::FromString(TEXT("{CurrentHP} / {MaxHP}")),
+					TEXT("CurrentHP"), FText::AsNumber(CurrentHP), // int32 可以直接传
+					TEXT("MaxHP"), FText::AsNumber(MaxHP)
+				);
+				EOBHUDWidget->BP_UpdateEnemyHP(Percent);
+				EOBHUDWidget->BP_UpdateEnemyText(Enemy->EnemyName, HPText);
+			}
 		}
 	}
 	else
 	{
-		// 如果鼠标下方不是敌人（指到了空地、或者指到了宝箱 ChestActor）
 		if (LastHoveredEnemy.IsValid())
 		{
-			// 清空缓存
 			LastHoveredEnemy = nullptr;
-
-			// 🌟 呼叫蓝图事件，隐藏血条
-			EOBHUDWidget->ShowStateBar(ESlateVisibility::Collapsed); // 或者 ESlateVisibility::Hidden
+			EOBHUDWidget->ShowStateBar(ESlateVisibility::Collapsed);
 		}
 	}
 }

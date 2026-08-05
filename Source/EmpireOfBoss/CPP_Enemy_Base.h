@@ -26,8 +26,6 @@ public:
 	// 🌟 属性改变时的 C++ 回调函数
 	void OnPlayerHealthChanged(const struct FOnAttributeChangeData& Data);
 
-	void InitHealthPercent();
-
 	UPROPERTY(BlueprintReadWrite, Category = "EOB|UI")
 	class UEOB_HUDWidget* EOBHUDWidget;
 
@@ -64,6 +62,10 @@ public:
 	 *  例：80 级 = 1 + 79 × 0.5 = 40.5 倍生命 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Enemy")
 	float StatGrowthPerLevel = 0.5f;
+
+	/** 敌人名字 */
+	UPROPERTY(EditAnywhere, Category = "EOB|Enemy")
+	FText EnemyName = NSLOCTEXT("Enemy", "DefaultEnemyName", "孙狗");
 
 	/** 按 EnemyLevel 放大生命/护甲（攻击力故意不放大，免得高级沙包一拳秒你） */
 	void ApplyLevelScaling();
