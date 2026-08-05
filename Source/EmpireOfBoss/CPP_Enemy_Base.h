@@ -52,4 +52,19 @@ public:
 
 	/** 按掉落表逐行掷点，在尸体周围散落拾取物 */
 	void SpawnLoot();
+
+	// ===================== 敌人等级（测试用沙包） =====================
+
+	/** 敌人等级：1 = 一拳一个的教学怪；调高 = 测试用沙包（生命/护甲按比例放大）。
+	 *  在关卡里选中某个敌人实例，细节面板里单独改它自己的等级，互不影响 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Enemy")
+	int32 EnemyLevel = 1;
+
+	/** 每高 1 级生命/护甲提升比例（0.5 = 每级 +50%，线性叠加）。
+	 *  例：80 级 = 1 + 79 × 0.5 = 40.5 倍生命 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Enemy")
+	float StatGrowthPerLevel = 0.5f;
+
+	/** 按 EnemyLevel 放大生命/护甲（攻击力故意不放大，免得高级沙包一拳秒你） */
+	void ApplyLevelScaling();
 };

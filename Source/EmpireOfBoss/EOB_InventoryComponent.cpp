@@ -17,6 +17,14 @@ void UEOB_InventoryComponent::BeginPlay()
 
 	// 初始化固定长度背包
 	Items.SetNum(InventorySize);
+
+	// 🛡️ 防御：Live Coding 热重载偶尔会静默冲掉蓝图里配置的引用。
+	//    词缀表丢了不会崩，但所有装备会退化成"只有基础属性"，必须有报警。
+	if (!AffixTable)
+	{
+		UE_LOG(LogTemp, Error,
+		       TEXT("[装备] InventoryComponent 的词缀表（AffixTable）未配置！所有装备将没有随机词缀。请到主角蓝图的组件默认值里指回 DT_Affixes。"));
+	}
 }
 
 int32 UEOB_InventoryComponent::AddItem(const FEOBItemInstance& Item)
@@ -105,6 +113,24 @@ FEOBItemInstance UEOB_InventoryComponent::CreateItemInstance(UEOB_ItemDefinition
 	NewItem.Definition = Def;
 	NewItem.Rarity = Rarity;
 
+	// 🔍 词缀诊断日志（定位"装备只剩基础属性"用，修好可删）
+	FString RarityName;
+	switch (Rarity)
+	{
+	case EEOBRarity::Green: RarityName = TEXT("绿");
+		break;
+	case EEOBRarity::Blue: RarityName = TEXT("蓝");
+		break;
+	case EEOBRarity::Gold: RarityName = TEXT("金");
+		break;
+	default: RarityName = TEXT("白");
+		break;
+	}
+	UE_LOG(LogTemp, Warning, TEXT("[词缀] 生成【%s】品质=%s，词缀表=%s"),
+	       Def ? *Def->ItemName.ToString() : TEXT("null"),
+	       *RarityName,
+	       AffixTable ? *AffixTable->GetName() : TEXT("❌未配置！"));
+
 	if (!Def || !AffixTable) return NewItem;
 
 	// 1. 品质决定词缀数量（TL2 手感：白 0 / 绿 1 / 蓝 2~3 / 金 4~5）
@@ -134,6 +160,9 @@ FEOBItemInstance UEOB_InventoryComponent::CreateItemInstance(UEOB_ItemDefinition
 			Candidates.Add(Row);
 		}
 	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[词缀] 应 roll %d 条，词缀表共 %d 行，符合槽位的候选 %d 行"),
+	       AffixCount, AllRows.Num(), Candidates.Num());
 
 	// 3. 加权抽取，抽中即移出候选（同一件装备不出重复词缀）
 	for (int32 i = 0; i < AffixCount && Candidates.Num() > 0; ++i)
@@ -165,6 +194,8 @@ FEOBItemInstance UEOB_InventoryComponent::CreateItemInstance(UEOB_ItemDefinition
 
 		Candidates.RemoveAt(Picked);
 	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[词缀] 最终 roll 出 %d 条"), NewItem.RolledAffixes.Num());
 
 	return NewItem;
 }

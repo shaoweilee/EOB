@@ -32,6 +32,10 @@ void ACPP_Enemy_Base::BeginPlay()
 {
 	Super::BeginPlay();
 	InitializeDefaultAttributes();
+
+	// 🌟 按实例上配置的 EnemyLevel 放大生命/护甲（1 级怪不变，高级怪变沙包）
+	ApplyLevelScaling();
+
 	// 放在 BeginPlay 里，游戏跑起来的瞬间会强行洗掉蓝图的一切垃圾缓存
 	if (UCapsuleComponent* CapCollision = GetCapsuleComponent())
 	{
@@ -50,6 +54,34 @@ void ACPP_Enemy_Base::BeginPlay()
 		AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(AttributeSet->GetHealthAttribute()).AddUObject(
 			this, &ACPP_Enemy_Base::OnPlayerHealthChanged);
 	}
+}
+
+void ACPP_Enemy_Base::ApplyLevelScaling()
+{
+	if (EnemyLevel <= 1 || !AbilitySystemComponent || !AttributeSet) return;
+
+	const float Mult = 1.f + (EnemyLevel - 1) * StatGrowthPerLevel;
+
+	// 生命上限和当前生命一起放大（Override 直接改基础值，等效于升级成长）
+	const float NewMaxHealth = AttributeSet->GetMaxHealth() * Mult;
+	AbilitySystemComponent->ApplyModToAttribute(
+		UEOB_AttributeSet::GetMaxHealthAttribute(), EGameplayModOp::Override, NewMaxHealth);
+	AbilitySystemComponent->ApplyModToAttribute(
+		UEOB_AttributeSet::GetHealthAttribute(), EGameplayModOp::Override, NewMaxHealth);
+
+	// 护甲也放大，技能打上去数字更小（基础护甲为 0 时乘了也是 0，无副作用）
+	AbilitySystemComponent->ApplyModToAttribute(
+		UEOB_AttributeSet::GetArmorAttribute(), EGameplayModOp::Override,
+		AttributeSet->GetArmor() * Mult);
+
+	// ⚠️ 攻击力故意不放大：80 级沙包是用来挨打的，不是用来一拳秒你的。
+	//    哪天想测试"高压生存"了，取消下面这三行的注释：
+	// AbilitySystemComponent->ApplyModToAttribute(
+	//     UEOB_AttributeSet::GetAttackPowerAttribute(), EGameplayModOp::Override,
+	//     AttributeSet->GetAttackPower() * Mult);
+
+	UE_LOG(LogTemp, Warning, TEXT("[敌人] %s 等级 %d：生命 %.0f，护甲 %.1f（放大 %.1f 倍）"),
+	       *GetName(), EnemyLevel, NewMaxHealth, AttributeSet->GetArmor(), Mult);
 }
 
 void ACPP_Enemy_Base::Tick(float DeltaTime)

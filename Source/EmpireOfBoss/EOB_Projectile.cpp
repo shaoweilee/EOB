@@ -5,6 +5,7 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Engine/OverlapResult.h"
+#include "DrawDebugHelpers.h"
 #include "MyGameplayTagsLibrary.h"
 
 AEOB_Projectile::AEOB_Projectile()
@@ -81,6 +82,9 @@ void AEOB_Projectile::Explode()
 	UAbilitySystemComponent* ASC = SourceASC.Get();
 	if (ASC && DamageGE)
 	{
+		// 🟠 调试范围显示：橙色线框球 = 爆炸判定半径，存在 2 秒，验收完可删
+		DrawDebugSphere(GetWorld(), GetActorLocation(), ExplodeRadius, 24, FColor::Orange, false, 2.f, 0, 3.f);
+
 		TArray<FOverlapResult> Overlaps;
 		FCollisionShape Shape = FCollisionShape::MakeSphere(ExplodeRadius);
 		GetWorld()->OverlapMultiByChannel(Overlaps, GetActorLocation(), FQuat::Identity, ECC_Pawn, Shape);

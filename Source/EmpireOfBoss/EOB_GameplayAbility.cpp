@@ -5,6 +5,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Engine/OverlapResult.h"
 #include "NavigationSystem.h"
+#include "DrawDebugHelpers.h"
 #include "EOPBaseCharacter.h"
 #include "EOB_AttributeSet.h"
 #include "MyGameplayTagsLibrary.h"
@@ -148,12 +149,26 @@ TArray<AActor*> UEOB_GameplayAbility::ApplyDamageFan(float Radius, float HalfAng
 	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
 	if (!SourceASC || !DamageEffectClass) return HitActors;
 
+	const FVector Forward = Avatar->GetActorForwardVector();
+
+	// 🟠 调试范围显示：橙色线框球 = 判定半径（抬高 50cm 免得半个球埋进地里）；
+	//    扇形技能额外画两条张角边线。猛击/旋风斩/冲锋/大地震击自动获得，验收完可删
+	{
+		const FVector Center = Avatar->GetActorLocation() + FVector(0.f, 0.f, 50.f);
+		DrawDebugSphere(Avatar->GetWorld(), Center, Radius, 24, FColor::Orange, false, 2.f, 0, 3.f);
+		if (HalfAngle < 180.f)
+		{
+			const FVector LeftEdge = Center + FRotator(0.f, -HalfAngle, 0.f).RotateVector(Forward) * Radius;
+			const FVector RightEdge = Center + FRotator(0.f, HalfAngle, 0.f).RotateVector(Forward) * Radius;
+			DrawDebugLine(Avatar->GetWorld(), Center, LeftEdge, FColor::Orange, false, 2.f, 0, 3.f);
+			DrawDebugLine(Avatar->GetWorld(), Center, RightEdge, FColor::Orange, false, 2.f, 0, 3.f);
+		}
+	}
+
 	TArray<FOverlapResult> Overlaps;
 	FCollisionShape Shape = FCollisionShape::MakeSphere(Radius);
 	Avatar->GetWorld()->OverlapMultiByChannel(Overlaps, Avatar->GetActorLocation(), FQuat::Identity,
 	                                          ECC_Pawn, Shape);
-
-	const FVector Forward = Avatar->GetActorForwardVector();
 
 	for (const FOverlapResult& Result : Overlaps)
 	{
@@ -191,6 +206,10 @@ TArray<AActor*> UEOB_GameplayAbility::ApplyDamageAtLocation(FVector Center, floa
 	AActor* Avatar = GetAvatarActorFromActorInfo();
 	UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo();
 	if (!Avatar || !SourceASC || !DamageEffectClass) return HitActors;
+
+	// 🟠 调试范围显示：橙色线框球 = 落点判定半径（烈焰风暴走这里），验收完可删
+	DrawDebugSphere(Avatar->GetWorld(), Center + FVector(0.f, 0.f, 50.f), Radius, 24, FColor::Orange,
+	                false, 2.f, 0, 3.f);
 
 	TArray<FOverlapResult> Overlaps;
 	FCollisionShape Shape = FCollisionShape::MakeSphere(Radius);
