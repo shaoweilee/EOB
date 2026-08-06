@@ -52,6 +52,10 @@ void AEmpireOfBossPlayerController::BeginPlay()
 		MyHero->AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			      UEOB_AttributeSet::GetHealthAttribute())
 		      .AddUObject(this, &AEmpireOfBossPlayerController::OnPlayerHealthChanged);
+		// 订阅 Mana 变化 → 刷新蓝条
+		MyHero->AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			      UEOB_AttributeSet::GetManaAttribute())
+		      .AddUObject(this, &AEmpireOfBossPlayerController::OnPlayerManaChanged);
 	}
 }
 
@@ -347,6 +351,19 @@ void AEmpireOfBossPlayerController::OnPlayerHealthChanged(const FOnAttributeChan
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("[UI 联动管道]: 检测到玩家血量发生改变！当前最新血量为: %.1f"), CurrentHealth);
+}
+
+void AEmpireOfBossPlayerController::OnPlayerManaChanged(const FOnAttributeChangeData& Data)
+{
+	const float MaxMana = MyHero->AttributeSet->GetMaxMana();
+	const float ManaPercent = MaxMana > 0.f ? (Data.NewValue / MaxMana) : 0.f;
+
+	if (EOBHUDWidget)
+	{
+		EOBHUDWidget->VM_UpdateMPVisual(ManaPercent);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[UI 联动管道]: 检测到玩家蓝量发生改变！当前最新蓝量为: %.1f"), Data.NewValue);
 }
 
 AActor* AEmpireOfBossPlayerController::GetTargetUnderCursor()
