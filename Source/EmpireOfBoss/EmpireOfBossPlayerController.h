@@ -119,6 +119,7 @@ public:
 protected:
 	/** Initialize input bindings */
 	virtual void SetupInputComponent() override;
+	void BindUIEvent();
 	/** Input handlers */
 	void OnInputStarted();
 	void OnSetDestinationTriggered();

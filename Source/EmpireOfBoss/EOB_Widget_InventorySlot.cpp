@@ -35,13 +35,15 @@ void UEOB_Widget_InventorySlot::UpdateSlot(const FEOBItemInstance& Item)
 {
 	if (Item.IsValid() && Item.Definition)
 	{
+		Image_icon->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 		Image_icon->SetBrushFromTexture(Item.Definition->Icon);
 		Border_rarity->SetBrushColor(UEOB_ItemFunctionLibrary::GetRarityColor(Item.Rarity));
 	}
 	else
 	{
-		// 空格：清图标 + 暗灰边框
+		// 空格：隐藏图标（无贴图的 Image 会画默认白方块）+ 暗灰边框
 		Image_icon->SetBrushFromTexture(nullptr);
+		Image_icon->SetVisibility(ESlateVisibility::Hidden);
 		Border_rarity->SetBrushColor(FLinearColor(0.15f, 0.15f, 0.15f, 1.f));
 	}
 }

@@ -43,20 +43,7 @@ void AEmpireOfBossPlayerController::BeginPlay()
 		MoveComp = MyHero->GetCharacterMovement();
 		OriginMaxWalkSpeed = MoveComp->MaxWalkSpeed;
 	}
-
-
-	// 🌟 2. 在末尾无缝加入 UI 订阅管道
-	if (MyHero && MyHero->AbilitySystemComponent && MyHero->AttributeSet)
-	{
-		// 核心魔法：向 ASC 订阅“当 Health 属性发生任何改变时，立刻呼叫我的 OnPlayerHealthChanged”
-		MyHero->AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
-			      UEOB_AttributeSet::GetHealthAttribute())
-		      .AddUObject(this, &AEmpireOfBossPlayerController::OnPlayerHealthChanged);
-		// 订阅 Mana 变化 → 刷新蓝条
-		MyHero->AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
-			      UEOB_AttributeSet::GetManaAttribute())
-		      .AddUObject(this, &AEmpireOfBossPlayerController::OnPlayerManaChanged);
-	}
+	GetWorldTimerManager().SetTimerForNextTick(this, &AEmpireOfBossPlayerController::BindUIEvent);
 }
 
 void AEmpireOfBossPlayerController::Tick(float DeltaTime)
@@ -363,7 +350,7 @@ void AEmpireOfBossPlayerController::OnPlayerManaChanged(const FOnAttributeChange
 		EOBHUDWidget->VM_UpdateMPVisual(ManaPercent);
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("[UI 联动管道]: 检测到玩家蓝量发生改变！当前最新蓝量为: %.1f"), Data.NewValue);
+	// UE_LOG(LogTemp, Log, TEXT("[UI 联动管道]: 检测到玩家蓝量发生改变！当前最新蓝量为: %.1f"), Data.NewValue);
 }
 
 AActor* AEmpireOfBossPlayerController::GetTargetUnderCursor()
@@ -480,5 +467,32 @@ void AEmpireOfBossPlayerController::OnCycleSkill()
 	if (MyHero && MyHero->SkillTreeComponent)
 	{
 		MyHero->SkillTreeComponent->CycleCurrentSkill();
+	}
+}
+
+void AEmpireOfBossPlayerController::BindUIEvent()
+{
+	// 🌟 2. 在末尾无缝加入 UI 订阅管道
+	if (MyHero && MyHero->AbilitySystemComponent && MyHero->AttributeSet)
+	{
+		// 核心魔法：向 ASC 订阅“当 Health 属性发生任何改变时，立刻呼叫我的 OnPlayerHealthChanged”
+		MyHero->AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			      UEOB_AttributeSet::GetHealthAttribute())
+		      .AddUObject(this, &AEmpireOfBossPlayerController::OnPlayerHealthChanged);
+		// 订阅 Mana 变化 → 刷新蓝条
+		MyHero->AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			      UEOB_AttributeSet::GetManaAttribute())
+		      .AddUObject(this, &AEmpireOfBossPlayerController::OnPlayerManaChanged);
+
+		// 🩺 诊断日志：确认订阅块真的执行了
+		UE_LOG(LogTemp, Warning, TEXT("[UI 联动管道] 血量/蓝量订阅已完成！"));
+	}
+	else
+	{
+		// 🩺 诊断日志：订阅块被跳过，说明此刻 MyHero/ASC/AttributeSet 还没就绪
+		UE_LOG(LogTemp, Error, TEXT("[UI 联动管道] 订阅失败！MyHero=%s ASC=%s AttributeSet=%s"),
+		       MyHero ? TEXT("OK") : TEXT("NULL"),
+		       (MyHero && MyHero->AbilitySystemComponent) ? TEXT("OK") : TEXT("NULL"),
+		       (MyHero && MyHero->AttributeSet) ? TEXT("OK") : TEXT("NULL"));
 	}
 }
