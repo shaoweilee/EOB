@@ -1,7 +1,6 @@
 #include "EOB_Widget_InventorySlot.h"
 #include "Components/Button.h"
 #include "Components/Image.h"
-#include "Components/Border.h"
 #include "EOB_InventoryComponent.h"
 #include "EOB_ItemDefinition.h"
 #include "EOB_ItemFunctionLibrary.h"
@@ -35,16 +34,29 @@ void UEOB_Widget_InventorySlot::UpdateSlot(const FEOBItemInstance& Item)
 {
 	if (Item.IsValid() && Item.Definition)
 	{
+		const FLinearColor RarityColor = UEOB_ItemFunctionLibrary::GetRarityColor(Item.Rarity);
+
+		// 物品图标
 		Image_icon->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 		Image_icon->SetBrushFromTexture(Item.Definition->Icon);
-		Border_rarity->SetBrushColor(UEOB_ItemFunctionLibrary::GetRarityColor(Item.Rarity));
+
+		// 品质边框 + 中心径向渐变，同染品质色（辉光透明度略降，柔和不抢图标）
+		Image_frame->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		Image_frame->SetColorAndOpacity(RarityColor);
+
+		Image_glow->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		Image_glow->SetColorAndOpacity(FLinearColor(RarityColor.R, RarityColor.G, RarityColor.B, 0.6f));
 	}
 	else
 	{
-		// 空格：隐藏图标（无贴图的 Image 会画默认白方块）+ 暗灰边框
+		// 空格：图标和辉光隐藏，背景全透明；边框留一丝淡灰方便辨认格子位置
 		Image_icon->SetBrushFromTexture(nullptr);
 		Image_icon->SetVisibility(ESlateVisibility::Hidden);
-		Border_rarity->SetBrushColor(FLinearColor(0.15f, 0.15f, 0.15f, 1.f));
+
+		Image_glow->SetVisibility(ESlateVisibility::Hidden);
+
+		Image_frame->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		Image_frame->SetColorAndOpacity(FLinearColor(1.f, 1.f, 1.f, 0.15f));
 	}
 }
 
