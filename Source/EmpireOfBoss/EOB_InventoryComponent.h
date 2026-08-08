@@ -53,12 +53,12 @@ public:
 	virtual void BeginPlay() override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Inventory", meta = (ClampMin = "1"))
-	int32 InventorySize = 40;
+	int32 InventorySize = 32;
 
 	/** 词缀池（DataTable，行结构 EOBAffixTableRow） */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Inventory")
 	TObjectPtr<UDataTable> AffixTable;
-	
+
 	/** M3a 补丁：四维词缀的派生加成规则表（在英雄蓝图的组件默认值里配置 8 行） */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Inventory")
 	TArray<FEOBDerivedAffixRule> DerivedAffixRules;

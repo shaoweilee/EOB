@@ -1,16 +1,7 @@
 #include "EOB_Widget_EquipmentPanel.h"
-#include "Components/PanelWidget.h"
-#include "Blueprint/WidgetBlueprintLibrary.h"
 #include "EOB_InventoryComponent.h"
 #include "EOB_Widget_InventorySlot.h"
 #include "EmpireOfBossCharacter.h"
-
-// 10 个槽位的生成顺序（戒指分左右）
-static const EEOBEquipSlot GEquipSlotOrder[] = {
-	EEOBEquipSlot::Weapon, EEOBEquipSlot::Shield, EEOBEquipSlot::Helmet, EEOBEquipSlot::Chest,
-	EEOBEquipSlot::Gloves, EEOBEquipSlot::Boots, EEOBEquipSlot::Belt, EEOBEquipSlot::Amulet,
-	EEOBEquipSlot::RingLeft, EEOBEquipSlot::RingRight
-};
 
 void UEOB_Widget_EquipmentPanel::NativeConstruct()
 {
@@ -26,39 +17,46 @@ void UEOB_Widget_EquipmentPanel::NativeConstruct()
 		}
 	}
 
-	// 程序自动生成 10 个装备格，蓝图不用手动摆
-	if (EquipSlotsBox && SlotWidgetClass)
-	{
-		EquipSlotsBox->ClearChildren();
-		SlotWidgets.Empty();
-
-		for (const EEOBEquipSlot SlotId : GEquipSlotOrder)
-		{
-			if (UEOB_Widget_InventorySlot* W = CreateWidget<UEOB_Widget_InventorySlot>(this, SlotWidgetClass))
-			{
-				W->InitEquipmentSlot(RefInventory, SlotId);
-				EquipSlotsBox->AddChild(W);
-				SlotWidgets.Add(W);
-			}
-		}
-	}
+	// 给蓝图上手动摆好的 10 个格子分发各自的槽位身份（点击 = 卸下对应槽）
+	Slot_Weapon->InitEquipmentSlot(RefInventory, EEOBEquipSlot::Weapon);
+	Slot_Shield->InitEquipmentSlot(RefInventory, EEOBEquipSlot::Shield);
+	Slot_Helmet->InitEquipmentSlot(RefInventory, EEOBEquipSlot::Helmet);
+	Slot_Chest->InitEquipmentSlot(RefInventory, EEOBEquipSlot::Chest);
+	Slot_Gloves->InitEquipmentSlot(RefInventory, EEOBEquipSlot::Gloves);
+	Slot_Boots->InitEquipmentSlot(RefInventory, EEOBEquipSlot::Boots);
+	Slot_Belt->InitEquipmentSlot(RefInventory, EEOBEquipSlot::Belt);
+	Slot_Amulet->InitEquipmentSlot(RefInventory, EEOBEquipSlot::Amulet);
+	Slot_RingLeft->InitEquipmentSlot(RefInventory, EEOBEquipSlot::RingLeft);
+	Slot_RingRight->InitEquipmentSlot(RefInventory, EEOBEquipSlot::RingRight);
 
 	RefreshEquip();
 }
 
-void UEOB_Widget_EquipmentPanel::RefreshEquip()
+void UEOB_Widget_EquipmentPanel::UpdateOneSlot(UEOB_Widget_InventorySlot* Widget, EEOBEquipSlot SlotId) const
 {
-	if (!RefInventory) return;
+	if (!Widget) return;
 
-	for (int32 i = 0; i < SlotWidgets.Num(); ++i)
+	if (RefInventory)
 	{
-		if (const FEOBItemInstance* Found = RefInventory->EquippedItems.Find(GEquipSlotOrder[i]))
+		if (const FEOBItemInstance* Found = RefInventory->EquippedItems.Find(SlotId))
 		{
-			SlotWidgets[i]->UpdateSlot(*Found);
-		}
-		else
-		{
-			SlotWidgets[i]->UpdateSlot(FEOBItemInstance()); // 空槽
+			Widget->UpdateSlot(*Found);
+			return;
 		}
 	}
+	Widget->UpdateSlot(FEOBItemInstance()); // 空槽
+}
+
+void UEOB_Widget_EquipmentPanel::RefreshEquip()
+{
+	UpdateOneSlot(Slot_Weapon, EEOBEquipSlot::Weapon);
+	UpdateOneSlot(Slot_Shield, EEOBEquipSlot::Shield);
+	UpdateOneSlot(Slot_Helmet, EEOBEquipSlot::Helmet);
+	UpdateOneSlot(Slot_Chest, EEOBEquipSlot::Chest);
+	UpdateOneSlot(Slot_Gloves, EEOBEquipSlot::Gloves);
+	UpdateOneSlot(Slot_Boots, EEOBEquipSlot::Boots);
+	UpdateOneSlot(Slot_Belt, EEOBEquipSlot::Belt);
+	UpdateOneSlot(Slot_Amulet, EEOBEquipSlot::Amulet);
+	UpdateOneSlot(Slot_RingLeft, EEOBEquipSlot::RingLeft);
+	UpdateOneSlot(Slot_RingRight, EEOBEquipSlot::RingRight);
 }

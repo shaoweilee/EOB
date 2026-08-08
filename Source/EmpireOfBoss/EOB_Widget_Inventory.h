@@ -32,7 +32,7 @@ protected:
 	TSubclassOf<UEOB_Widget_InventorySlot> SlotWidgetClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
-	int32 GridColumns = 4;
+	int32 GridColumns = 8;
 
 	UPROPERTY()
 	TObjectPtr<UEOB_InventoryComponent> RefInventory;
