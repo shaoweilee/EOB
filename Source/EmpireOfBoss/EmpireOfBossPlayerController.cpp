@@ -483,6 +483,14 @@ void AEmpireOfBossPlayerController::BindUIEvent()
 		MyHero->AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			      UEOB_AttributeSet::GetManaAttribute())
 		      .AddUObject(this, &AEmpireOfBossPlayerController::OnPlayerManaChanged);
+		// maxhealth
+		MyHero->AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			      UEOB_AttributeSet::GetMaxHealthAttribute())
+		      .AddUObject(this, &AEmpireOfBossPlayerController::OnPlayerHealthChanged);
+		// maxmana
+		MyHero->AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+			      UEOB_AttributeSet::GetMaxManaAttribute())
+		      .AddUObject(this, &AEmpireOfBossPlayerController::OnPlayerManaChanged);
 
 		// 🩺 诊断日志：确认订阅块真的执行了
 		UE_LOG(LogTemp, Warning, TEXT("[UI 联动管道] 血量/蓝量订阅已完成！"));

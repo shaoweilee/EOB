@@ -37,13 +37,8 @@ void AEOB_PickupBase::BeginPlay()
 	PickupSphere->OnComponentBeginOverlap.AddDynamic(this, &AEOB_PickupBase::OnSphereOverlap);
 
 	// 类默认就配了装备定义的（如 BP_Pickup_Sword），也按 DA 刷新一次外观
+	// （金币/药水没有 DroppedItemDefinition，函数内部会直接返回，不受影响）
 	ApplyDefinitionVisuals();
-
-	// 装备拾取物把网格落地（金币/药水没有 DroppedItemDefinition，不受影响）
-	if (DroppedItemDefinition)
-	{
-		SnapMeshToGround();
-	}
 }
 
 void AEOB_PickupBase::SetDroppedItemDefinition(UEOB_ItemDefinition* NewDefinition)
@@ -55,24 +50,34 @@ void AEOB_PickupBase::SetDroppedItemDefinition(UEOB_ItemDefinition* NewDefinitio
 
 void AEOB_PickupBase::ApplyDefinitionVisuals()
 {
+	if (!DroppedItemDefinition || !PickupMesh) return;
+
 	// DA 里配了掉落外观网格就套用；没配则保留拾取物蓝图自己的网格
-	if (DroppedItemDefinition && DroppedItemDefinition->WorldMesh && PickupMesh)
+	if (DroppedItemDefinition->WorldMesh)
 	{
 		PickupMesh->SetStaticMesh(DroppedItemDefinition->WorldMesh);
-		// 换完网格包围盒变了，重新落地
-		SnapMeshToGround();
 	}
+
+	// 套用 DA 的旋转和缩放（默认 0 度 / 1 倍时等于不变）
+	PickupMesh->SetRelativeRotation(DroppedItemDefinition->WorldMeshRotation);
+	PickupMesh->SetRelativeScale3D(DroppedItemDefinition->WorldMeshScale);
+
+	// 网格/旋转/缩放任一变化后包围盒都变了，重新落地
+	SnapMeshToGround();
 }
 
 void AEOB_PickupBase::SnapMeshToGround()
 {
 	if (!PickupMesh || !PickupMesh->GetStaticMesh()) return;
 
-	// 网格资产的本地包围盒：盒底 = Origin.Z - BoxExtent.Z
-	// 把组件 Z 抬成 BoxExtent.Z - Origin.Z，盒底就正好贴到 Actor 原点（= 地面）
-	const FBoxSphereBounds Bounds = PickupMesh->GetStaticMesh()->GetBounds();
+	// 把网格的本地包围盒按组件当前的相对变换（含旋转和缩放）变换到 Actor 空间，
+	// 求出盒子的最低点，然后把组件抬高相应距离，让盒底正好贴到 Actor 原点（= 地面）。
+	// 这样无论"躺倒"还是缩放，落地都自动正确。
+	const FBox LocalBox = PickupMesh->GetStaticMesh()->GetBoundingBox();
+	const FBox ActorBox = LocalBox.TransformBy(PickupMesh->GetRelativeTransform());
+
 	FVector Loc = PickupMesh->GetRelativeLocation();
-	Loc.Z = Bounds.BoxExtent.Z - Bounds.Origin.Z;
+	Loc.Z -= ActorBox.Min.Z;
 	PickupMesh->SetRelativeLocation(Loc);
 }
 

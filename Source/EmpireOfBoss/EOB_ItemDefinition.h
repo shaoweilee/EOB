@@ -29,6 +29,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Item")
 	TObjectPtr<UStaticMesh> WorldMesh;
 
+	/** 掉落外观的相对旋转（让装备"躺下"等；仅装备有意义，留 0 则不转） */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Item")
+	FRotator WorldMeshRotation = FRotator::ZeroRotator;
+
+	/** 掉落外观的缩放（项链比盔甲小这类调节；仅装备有意义，1 = 原始大小） */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Item")
+	FVector WorldMeshScale = FVector(1.f, 1.f, 1.f);
+
 	/** 装备槽位（戒指类选 Ring，穿戴时自动分配左右手） */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Item")
 	EEOBEquipSlot EquipSlot = EEOBEquipSlot::Weapon;
