@@ -5,6 +5,7 @@
 #include "EOB_LootTableRow.generated.h"
 
 class AEOB_PickupBase;
+class UEOB_ItemDefinition;
 
 /**
  * 掉落表行结构
@@ -16,7 +17,7 @@ struct EMPIREOFBOSS_API FEOBLootTableRow : public FTableRowBase
 {
 	GENERATED_BODY()
 
-	/** 掉落的拾取物类（BP_Pickup_Gold / BP_Pickup_Potion 等） */
+	/** 掉落的拾取物类（BP_Pickup_Gold / BP_Pickup_Potion / 装备拾取物 等） */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Loot")
 	TSubclassOf<AEOB_PickupBase> PickupClass;
 
@@ -30,4 +31,9 @@ struct EMPIREOFBOSS_API FEOBLootTableRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Loot", meta = (ClampMin = "1"))
 	int32 MaxCount = 1;
+
+	/** 装备定义（仅装备掉落行需要：设置后生成拾取物时覆盖其默认值，
+	 *  这样所有装备可以共用一个拾取物类，掉落行自己决定掉什么装备） */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Loot")
+	TObjectPtr<UEOB_ItemDefinition> DroppedItemDefinition;
 };

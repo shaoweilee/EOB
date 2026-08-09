@@ -11,12 +11,13 @@ class AEmpireOfBossCharacter;
 class UEOB_ItemDefinition;
 
 /**
- * 拾取物基类：金币、药水、（未来的）装备掉落都继承它。
+ * 拾取物基类：金币、药水、装备掉落都继承它。
  * 主角走进 PickupRadius 范围自动拾取，无需点击。
  *
- * 两个开箱即用的子类配置：
+ * 三个开箱即用的子类配置：
  *  - BP_Pickup_Gold：设置 GoldValue > 0，拾取后金币进 GameInstance
  *  - BP_Pickup_Potion：设置 GrantedEffectClass 为一个 Instant 回血 GE
+ *  - 装备拾取物：设置 DroppedItemDefinition，拾取时掷品质进背包
  */
 UCLASS()
 class EMPIREOFBOSS_API AEOB_PickupBase : public AActor
@@ -25,6 +26,9 @@ class EMPIREOFBOSS_API AEOB_PickupBase : public AActor
 
 public:
 	AEOB_PickupBase();
+
+	/** 生成后覆盖装备定义（掉落表行指定装备时用，见 CPP_Enemy_Base::SpawnLoot） */
+	void SetDroppedItemDefinition(UEOB_ItemDefinition* NewDefinition) { DroppedItemDefinition = NewDefinition; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -46,7 +50,7 @@ protected:
 	/** 拾取时对主角施加的 GE（药水回血等，Instant 类型） */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Pickup")
 	TSubclassOf<UGameplayEffect> GrantedEffectClass;
-	
+
 	// ===================== M2 新增：装备掉落 =====================
 
 	/** 装备定义（设置后此拾取物变为装备：拾取时掷品质进背包） */

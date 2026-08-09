@@ -114,7 +114,7 @@ void ACPP_Enemy_Base::OnPlayerHealthChanged(const struct FOnAttributeChangeData&
 
 void ACPP_Enemy_Base::OnDeath()
 {
-	// 1. 按掉落表掷点，爆出金币/药水
+	// 1. 按掉落表掷点，爆出金币/药水/装备
 	SpawnLoot();
 	// 3. M3a 新增：给英雄发击杀经验
 	if (UWorld* World = GetWorld())
@@ -168,7 +168,16 @@ void ACPP_Enemy_Base::SpawnLoot()
 
 			FActorSpawnParameters Params;
 			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-			GetWorld()->SpawnActor<AEOB_PickupBase>(Row->PickupClass, SpawnLoc, FRotator::ZeroRotator, Params);
+			if (AEOB_PickupBase* Pickup = GetWorld()->SpawnActor<AEOB_PickupBase>(
+				Row->PickupClass, SpawnLoc, FRotator::ZeroRotator, Params))
+			{
+				// 🌟 掉落行指定了装备定义时，覆盖拾取物类上的默认值：
+				//    这样所有装备共用一个拾取物类，掉落行自己决定掉什么
+				if (Row->DroppedItemDefinition)
+				{
+					Pickup->SetDroppedItemDefinition(Row->DroppedItemDefinition);
+				}
+			}
 		}
 	}
 }
