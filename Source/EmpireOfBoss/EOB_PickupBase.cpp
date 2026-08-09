@@ -35,6 +35,45 @@ void AEOB_PickupBase::BeginPlay()
 	PickupSphere->SetSphereRadius(PickupRadius);
 
 	PickupSphere->OnComponentBeginOverlap.AddDynamic(this, &AEOB_PickupBase::OnSphereOverlap);
+
+	// 类默认就配了装备定义的（如 BP_Pickup_Sword），也按 DA 刷新一次外观
+	ApplyDefinitionVisuals();
+
+	// 装备拾取物把网格落地（金币/药水没有 DroppedItemDefinition，不受影响）
+	if (DroppedItemDefinition)
+	{
+		SnapMeshToGround();
+	}
+}
+
+void AEOB_PickupBase::SetDroppedItemDefinition(UEOB_ItemDefinition* NewDefinition)
+{
+	DroppedItemDefinition = NewDefinition;
+	// 掉落行覆盖定义时外观也要跟着换（此时 BeginPlay 已跑完，必须手动刷）
+	ApplyDefinitionVisuals();
+}
+
+void AEOB_PickupBase::ApplyDefinitionVisuals()
+{
+	// DA 里配了掉落外观网格就套用；没配则保留拾取物蓝图自己的网格
+	if (DroppedItemDefinition && DroppedItemDefinition->WorldMesh && PickupMesh)
+	{
+		PickupMesh->SetStaticMesh(DroppedItemDefinition->WorldMesh);
+		// 换完网格包围盒变了，重新落地
+		SnapMeshToGround();
+	}
+}
+
+void AEOB_PickupBase::SnapMeshToGround()
+{
+	if (!PickupMesh || !PickupMesh->GetStaticMesh()) return;
+
+	// 网格资产的本地包围盒：盒底 = Origin.Z - BoxExtent.Z
+	// 把组件 Z 抬成 BoxExtent.Z - Origin.Z，盒底就正好贴到 Actor 原点（= 地面）
+	const FBoxSphereBounds Bounds = PickupMesh->GetStaticMesh()->GetBounds();
+	FVector Loc = PickupMesh->GetRelativeLocation();
+	Loc.Z = Bounds.BoxExtent.Z - Bounds.Origin.Z;
+	PickupMesh->SetRelativeLocation(Loc);
 }
 
 void AEOB_PickupBase::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,

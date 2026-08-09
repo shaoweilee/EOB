@@ -27,8 +27,14 @@ class EMPIREOFBOSS_API AEOB_PickupBase : public AActor
 public:
 	AEOB_PickupBase();
 
-	/** 生成后覆盖装备定义（掉落表行指定装备时用，见 CPP_Enemy_Base::SpawnLoot） */
-	void SetDroppedItemDefinition(UEOB_ItemDefinition* NewDefinition) { DroppedItemDefinition = NewDefinition; }
+	/** 生成后覆盖装备定义（掉落表行指定装备时用，见 CPP_Enemy_Base::SpawnLoot），并同步刷新外观网格 */
+	void SetDroppedItemDefinition(UEOB_ItemDefinition* NewDefinition);
+
+	/** 按当前装备定义刷新掉落物外观（DA 里配了 WorldMesh 才覆盖拾取物蓝图自己的网格） */
+	void ApplyDefinitionVisuals();
+
+	/** 把网格按包围盒"落地"：让网格最低点贴到 Actor 原点（生成时原点已被射线贴到地面） */
+	void SnapMeshToGround();
 
 protected:
 	virtual void BeginPlay() override;
