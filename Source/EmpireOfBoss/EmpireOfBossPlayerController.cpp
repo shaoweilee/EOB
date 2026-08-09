@@ -327,8 +327,7 @@ void AEmpireOfBossPlayerController::RotateCharacterToCursor()
 // 🌟 3. 实现回调函数
 void AEmpireOfBossPlayerController::OnPlayerHealthChanged(const FOnAttributeChangeData& Data)
 {
-	// Data.NewValue 就是扣血/加血后的最新值！
-	float CurrentHealth = Data.NewValue;
+	float CurrentHealth = MyHero->AttributeSet->GetHealth();
 	float MaxHealth = MyHero->AttributeSet->GetMaxHealth();
 	float HealthPercent = MaxHealth > 0.f ? (CurrentHealth / MaxHealth) : 0.f;
 
@@ -337,19 +336,19 @@ void AEmpireOfBossPlayerController::OnPlayerHealthChanged(const FOnAttributeChan
 		EOBHUDWidget->VM_UpdateHPVisual(HealthPercent);
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("[UI 联动管道]: 检测到玩家血量发生改变！当前最新血量为: %.1f"), CurrentHealth);
+	UE_LOG(LogTemp, Log, TEXT("[UI 联动管道]: 检测到玩家血量发生改变！当前最新血量为: %.1f"), Data.NewValue);
 }
 
 void AEmpireOfBossPlayerController::OnPlayerManaChanged(const FOnAttributeChangeData& Data)
 {
+	const float CurrentMana = MyHero->AttributeSet->GetMana();
 	const float MaxMana = MyHero->AttributeSet->GetMaxMana();
-	const float ManaPercent = MaxMana > 0.f ? (Data.NewValue / MaxMana) : 0.f;
+	const float ManaPercent = MaxMana > 0.f ? (CurrentMana / MaxMana) : 0.f;
 
 	if (EOBHUDWidget)
 	{
 		EOBHUDWidget->VM_UpdateMPVisual(ManaPercent);
 	}
-
 	// UE_LOG(LogTemp, Log, TEXT("[UI 联动管道]: 检测到玩家蓝量发生改变！当前最新蓝量为: %.1f"), Data.NewValue);
 }
 
