@@ -324,33 +324,6 @@ void AEmpireOfBossPlayerController::RotateCharacterToCursor()
 	}
 }
 
-// 🌟 3. 实现回调函数
-void AEmpireOfBossPlayerController::OnPlayerHealthChanged(const FOnAttributeChangeData& Data)
-{
-	float CurrentHealth = MyHero->AttributeSet->GetHealth();
-	float MaxHealth = MyHero->AttributeSet->GetMaxHealth();
-	float HealthPercent = MaxHealth > 0.f ? (CurrentHealth / MaxHealth) : 0.f;
-
-	if (EOBHUDWidget)
-	{
-		EOBHUDWidget->VM_UpdateHPVisual(HealthPercent);
-	}
-
-	UE_LOG(LogTemp, Log, TEXT("[UI 联动管道]: 检测到玩家血量发生改变！当前最新血量为: %.1f"), Data.NewValue);
-}
-
-void AEmpireOfBossPlayerController::OnPlayerManaChanged(const FOnAttributeChangeData& Data)
-{
-	const float CurrentMana = MyHero->AttributeSet->GetMana();
-	const float MaxMana = MyHero->AttributeSet->GetMaxMana();
-	const float ManaPercent = MaxMana > 0.f ? (CurrentMana / MaxMana) : 0.f;
-
-	if (EOBHUDWidget)
-	{
-		EOBHUDWidget->VM_UpdateMPVisual(ManaPercent);
-	}
-	// UE_LOG(LogTemp, Log, TEXT("[UI 联动管道]: 检测到玩家蓝量发生改变！当前最新蓝量为: %.1f"), Data.NewValue);
-}
 
 AActor* AEmpireOfBossPlayerController::GetTargetUnderCursor()
 {
@@ -485,11 +458,11 @@ void AEmpireOfBossPlayerController::BindUIEvent()
 		// maxhealth
 		MyHero->AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			      UEOB_AttributeSet::GetMaxHealthAttribute())
-		      .AddUObject(this, &AEmpireOfBossPlayerController::OnPlayerHealthChanged);
+		      .AddUObject(this, &AEmpireOfBossPlayerController::OnPlayerMaxHealthChanged);
 		// maxmana
 		MyHero->AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 			      UEOB_AttributeSet::GetMaxManaAttribute())
-		      .AddUObject(this, &AEmpireOfBossPlayerController::OnPlayerManaChanged);
+		      .AddUObject(this, &AEmpireOfBossPlayerController::OnPlayerMaxManaChanged);
 
 		// 🩺 诊断日志：确认订阅块真的执行了
 		UE_LOG(LogTemp, Warning, TEXT("[UI 联动管道] 血量/蓝量订阅已完成！"));
@@ -502,4 +475,49 @@ void AEmpireOfBossPlayerController::BindUIEvent()
 		       (MyHero && MyHero->AbilitySystemComponent) ? TEXT("OK") : TEXT("NULL"),
 		       (MyHero && MyHero->AttributeSet) ? TEXT("OK") : TEXT("NULL"));
 	}
+}
+
+// 🌟 血条统一刷新：当前血量变、上限变都走这里
+void AEmpireOfBossPlayerController::RefreshHealthBar()
+{
+	if (!MyHero || !MyHero->AttributeSet) return;
+	const float MaxHealth = MyHero->AttributeSet->GetMaxHealth();
+	const float HealthPercent = MaxHealth > 0.f ? (MyHero->AttributeSet->GetHealth() / MaxHealth) : 0.f;
+	if (EOBHUDWidget)
+	{
+		EOBHUDWidget->VM_UpdateHPVisual(HealthPercent);
+	}
+}
+
+// 🌟 蓝条统一刷新：当前蓝量变、上限变都走这里
+void AEmpireOfBossPlayerController::RefreshManaBar()
+{
+	if (!MyHero || !MyHero->AttributeSet) return;
+	const float MaxMana = MyHero->AttributeSet->GetMaxMana();
+	const float ManaPercent = MaxMana > 0.f ? (MyHero->AttributeSet->GetMana() / MaxMana) : 0.f;
+	if (EOBHUDWidget)
+	{
+		EOBHUDWidget->VM_UpdateMPVisual(ManaPercent);
+	}
+}
+
+// 🌟 以下 4 个回调只做"路由"，不关心 Data.NewValue，彻底杜绝拿错值的坑
+void AEmpireOfBossPlayerController::OnPlayerHealthChanged(const FOnAttributeChangeData& Data)
+{
+	RefreshHealthBar();
+}
+
+void AEmpireOfBossPlayerController::OnPlayerManaChanged(const FOnAttributeChangeData& Data)
+{
+	RefreshManaBar();
+}
+
+void AEmpireOfBossPlayerController::OnPlayerMaxHealthChanged(const FOnAttributeChangeData& Data)
+{
+	RefreshHealthBar();
+}
+
+void AEmpireOfBossPlayerController::OnPlayerMaxManaChanged(const FOnAttributeChangeData& Data)
+{
+	RefreshManaBar();
 }

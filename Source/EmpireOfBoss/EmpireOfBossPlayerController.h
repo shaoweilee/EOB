@@ -136,6 +136,11 @@ protected:
 	void OnPlayerHealthChanged(const struct FOnAttributeChangeData& Data);
 	// 🌟 蓝量改变时的 C++ 回调函数
 	void OnPlayerManaChanged(const struct FOnAttributeChangeData& Data);
+	void OnPlayerMaxHealthChanged(const struct FOnAttributeChangeData& Data);
+	void OnPlayerMaxManaChanged(const struct FOnAttributeChangeData& Data);
+	/** 血条/蓝条统一刷新入口：当前值变、上限变都走这里，永远从 AttributeSet 现读现算 */
+	void RefreshHealthBar();
+	void RefreshManaBar();
 
 	AActor* GetTargetUnderCursor();
 	void OnToggleInventory();

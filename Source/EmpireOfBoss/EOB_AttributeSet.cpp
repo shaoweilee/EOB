@@ -25,6 +25,35 @@ void UEOB_AttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, 
 	}
 }
 
+// 属性真正改变后触发（上限缩水时把当前值钳回去）
+void UEOB_AttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue)
+{
+	Super::PostAttributeChange(Attribute, OldValue, NewValue);
+
+	// 🌟 血量上限变化（穿/卸加血装备、升级、Buff 等所有途径都会走到这里）：
+	//    上限降低时，当前血量可能超出新上限（如 187/156），钳回上限以内。
+	//    SetHealth 会触发血量变化委托，血球 UI 自动刷新，无需额外处理。
+	if (Attribute == GetMaxHealthAttribute())
+	{
+		if (GetHealth() > GetMaxHealth())
+		{
+			SetHealth(GetMaxHealth());
+			UE_LOG(LogTemp, Log, TEXT("[GAS属性集]: 血量上限变为 %.1f，当前血量超上限已钳制到 %.1f"),
+			       GetMaxHealth(), GetHealth());
+		}
+	}
+	// 🌟 蓝量上限同理
+	else if (Attribute == GetMaxManaAttribute())
+	{
+		if (GetMana() > GetMaxMana())
+		{
+			SetMana(GetMaxMana());
+			UE_LOG(LogTemp, Log, TEXT("[GAS属性集]: 蓝量上限变为 %.1f，当前蓝量超上限已钳制到 %.1f"),
+			       GetMaxMana(), GetMana());
+		}
+	}
+}
+
 // 属性真正改变后触发（处理暗黑式伤害减伤公式）
 void UEOB_AttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
 {
