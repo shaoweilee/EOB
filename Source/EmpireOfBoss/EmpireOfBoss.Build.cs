@@ -8,7 +8,8 @@ public class EmpireOfBoss : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		PublicDependencyModuleNames.AddRange(new string[] {
+		PublicDependencyModuleNames.AddRange(new string[]
+		{
 			"Core",
 			"CoreUObject",
 			"Engine",
@@ -21,6 +22,7 @@ public class EmpireOfBoss : ModuleRules
 			"Niagara",
 			"UMG",
 			"Slate",
+			"SlateCore",
 			"GameplayAbilities",
 			"GameplayTags",
 			"GameplayTasks"
@@ -28,7 +30,8 @@ public class EmpireOfBoss : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
 
-		PublicIncludePaths.AddRange(new string[] {
+		PublicIncludePaths.AddRange(new string[]
+		{
 			"EmpireOfBoss",
 			"EmpireOfBoss/Variant_Strategy",
 			"EmpireOfBoss/Variant_Strategy/UI",
@@ -37,9 +40,6 @@ public class EmpireOfBoss : ModuleRules
 			"EmpireOfBoss/Variant_TwinStick/Gameplay",
 			"EmpireOfBoss/Variant_TwinStick/UI"
 		});
-
-		// Uncomment if you are using Slate UI
-		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 
 		// Uncomment if you are using online features
 		// PrivateDependencyModuleNames.Add("OnlineSubsystem");

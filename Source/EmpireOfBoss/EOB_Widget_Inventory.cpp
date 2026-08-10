@@ -1,5 +1,7 @@
 #include "EOB_Widget_Inventory.h"
 #include "Components/UniformGridPanel.h"
+#include "Components/VerticalBox.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "EOB_InventoryComponent.h"
 #include "EOB_Widget_InventorySlot.h"
@@ -21,17 +23,73 @@ void UEOB_Widget_Inventory::NativeConstruct()
 		}
 	}
 
-	// 生成 12 个页签，摆成 2 行 × 6 列
-	if (GridPanel_Tabs && TabWidgetClass)
+	// ── 格子网格：按内容自适应高度，杜绝“行数少时每行被拉高” ──
+	// UniformGridPanel 会把自己拿到的全部空间平均分给【现有】的行，
+	// 所以 20 格（3 行）时每行会被分到 440/3 ≈ 146 高。
+	// 把它的画布槽改成“大小到内容”后，网格高度 = 行数 × 格子期望高度。
+	if (GridPanel_Items)
+	{
+		if (UCanvasPanelSlot* GridSlot = Cast<UCanvasPanelSlot>(GridPanel_Items->Slot))
+		{
+			const FAnchors Anchors = GridSlot->GetAnchors();
+			const bool bTopLeftAnchors = Anchors.Minimum.Equals(FVector2D(0.f, 0.f))
+				&& Anchors.Maximum.Equals(FVector2D(0.f, 0.f));
+
+			if (bTopLeftAnchors && !GridSlot->GetAutoSize())
+			{
+				// 先换算出内容当前的左上角，设为新位置，避免网格位置跳变
+				const FVector2D TopLeft = GridSlot->GetPosition() - GridSlot->GetAlignment() * GridSlot->GetSize();
+				GridSlot->SetAlignment(FVector2D(0.f, 0.f));
+				GridSlot->SetPosition(TopLeft);
+				GridSlot->SetAutoSize(true);
+			}
+			else if (!bTopLeftAnchors)
+			{
+				UE_LOG(LogTemp, Warning,
+				       TEXT(
+					       "[背包 UI] GridPanel_Items 的画布槽锚点不在左上角，请在 WBP_Inventory 里手动：锚点改左上、对齐 (0,0)、勾选“大小到内容”，再把位置设成网格现在的左上角。"
+				       ));
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning,
+			       TEXT("[背包 UI] GridPanel_Items 的父槽不是画布槽，请在 WBP_Inventory 里把它放进画布面板并勾选“大小到内容”，否则不满 32 格时格子会被拉伸。"));
+		}
+	}
+
+	// ── 创建 12 个页签：左侧 6 个（第 1~6 页），右侧 6 个（第 7~12 页） ──
+	const TSubclassOf<UEOB_Widget_InventoryTab> RightClass = TabWidgetClassRight
+		                                                         ? TabWidgetClassRight
+		                                                         : TabWidgetClassLeft;
+
+	if (TabWidgetClassLeft && VerticalBox_TabsLeft && VerticalBox_TabsRight)
 	{
 		for (int32 Tab = 0; Tab < UEOB_InventoryComponent::NumTabs; ++Tab)
 		{
-			UEOB_Widget_InventoryTab* TabWidget = CreateWidget<UEOB_Widget_InventoryTab>(this, TabWidgetClass);
+			const bool bLeftSide = (Tab < UEOB_InventoryComponent::NumTabs / 2);
+			const TSubclassOf<UEOB_Widget_InventoryTab> UseClass = bLeftSide ? TabWidgetClassLeft : RightClass;
+
+			UEOB_Widget_InventoryTab* TabWidget = CreateWidget<UEOB_Widget_InventoryTab>(this, UseClass);
 			if (!TabWidget) continue;
 
 			TabWidget->InitTab(RefInventory, this, Tab);
-			GridPanel_Tabs->AddChildToUniformGrid(TabWidget, Tab / 6, Tab % 6);
+			if (bLeftSide)
+			{
+				VerticalBox_TabsLeft->AddChild(TabWidget);
+			}
+			else
+			{
+				VerticalBox_TabsRight->AddChild(TabWidget);
+			}
 		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning,
+		       TEXT(
+			       "[背包 UI] 请在 WBP_Inventory 的类默认值里设置 TabWidgetClassLeft / TabWidgetClassRight，并摆好 VerticalBox_TabsLeft / VerticalBox_TabsRight 两个垂直框。"
+		       ));
 	}
 
 	RefreshUI();
@@ -55,15 +113,20 @@ void UEOB_Widget_Inventory::SetCurrentTab(int32 NewTab)
 
 void UEOB_Widget_Inventory::RefreshTabs()
 {
-	if (!GridPanel_Tabs) return;
-
-	for (UWidget* Child : GridPanel_Tabs->GetAllChildren())
+	auto RefreshBoxChildren = [](UVerticalBox* Box)
 	{
-		if (UEOB_Widget_InventoryTab* TabWidget = Cast<UEOB_Widget_InventoryTab>(Child))
+		if (!Box) return;
+		for (UWidget* Child : Box->GetAllChildren())
 		{
-			TabWidget->RefreshTab();
+			if (UEOB_Widget_InventoryTab* TabWidget = Cast<UEOB_Widget_InventoryTab>(Child))
+			{
+				TabWidget->RefreshTab();
+			}
 		}
-	}
+	};
+
+	RefreshBoxChildren(VerticalBox_TabsLeft);
+	RefreshBoxChildren(VerticalBox_TabsRight);
 }
 
 void UEOB_Widget_Inventory::RefreshUI()

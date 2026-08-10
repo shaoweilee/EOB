@@ -5,15 +5,19 @@
 #include "EOB_Widget_Inventory.generated.h"
 
 class UUniformGridPanel;
+class UVerticalBox;
 class UEOB_InventoryComponent;
 class UEOB_Widget_InventorySlot;
 class UEOB_Widget_InventoryTab;
 
 /**
- * 背包面板：标签栏（12 个页签）+ 当前页格子（格子数 = 该页背包容量）。
- * 蓝图子类需要两个同名 Uniform Grid Panel：
- *  - GridPanel_Tabs：标签栏容器（12 个页签摆成 2 行 × 6 列）
+ * 背包面板：左右两列页签（各 6 个）+ 当前页格子（格子数 = 该页背包容量）。
+ * 蓝图子类需要三个同名容器：
+ *  - VerticalBox_TabsLeft：左侧页签栏（第 1~6 页，从上到下）
+ *  - VerticalBox_TabsRight：右侧页签栏（第 7~12 页，从上到下）
  *  - GridPanel_Items：物品格子容器
+ * 左右页签各用一个皮肤类（TabWidgetClassLeft / TabWidgetClassRight），
+ * 两个皮肤的父类都是 EOB_Widget_InventoryTab，只是 UMG 布局镜像。
  */
 UCLASS()
 class EMPIREOFBOSS_API UEOB_Widget_Inventory : public UUserWidget
@@ -42,17 +46,25 @@ protected:
 	UPROPERTY(meta = (BindWidget), BlueprintReadOnly, Category = "EOB|UI")
 	TObjectPtr<UUniformGridPanel> GridPanel_Items;
 
-	/** 标签栏容器（页签摆成 2 行 × 6 列） */
+	/** 左侧页签栏容器（第 1~6 页） */
 	UPROPERTY(meta = (BindWidget), BlueprintReadOnly, Category = "EOB|UI")
-	TObjectPtr<UUniformGridPanel> GridPanel_Tabs;
+	TObjectPtr<UVerticalBox> VerticalBox_TabsLeft;
+
+	/** 右侧页签栏容器（第 7~12 页） */
+	UPROPERTY(meta = (BindWidget), BlueprintReadOnly, Category = "EOB|UI")
+	TObjectPtr<UVerticalBox> VerticalBox_TabsRight;
 
 	/** 格子控件类（蓝图默认值里选 WBP_InventorySlot） */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
 	TSubclassOf<UEOB_Widget_InventorySlot> SlotWidgetClass;
 
-	/** 页签控件类（蓝图默认值里选 WBP_InventoryTab） */
+	/** 左侧页签皮肤类（WBP_InventoryTab_Left：左文字 + 右箭头） */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
-	TSubclassOf<UEOB_Widget_InventoryTab> TabWidgetClass;
+	TSubclassOf<UEOB_Widget_InventoryTab> TabWidgetClassLeft;
+
+	/** 右侧页签皮肤类（WBP_InventoryTab_Right：左箭头 + 右文字）。不填则 12 个页签都用左侧皮肤 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
+	TSubclassOf<UEOB_Widget_InventoryTab> TabWidgetClassRight;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
 	int32 GridColumns = 8;
