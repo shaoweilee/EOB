@@ -10,7 +10,7 @@ class UStaticMesh;
 
 /**
  * 物品静态定义（在编辑器：右键 → 杂项 → 数据资产 → 选 EOB_ItemDefinition 创建实例）
- * 每件装备原型一个：铁剑、皮盔……
+ * 装备原型：铁剑、皮盔……；背包原型：旅行背包（Kind 选"背包"，品质在掉落时掷，决定容量）
  */
 UCLASS(BlueprintType)
 class EMPIREOFBOSS_API UEOB_ItemDefinition : public UDataAsset
@@ -20,6 +20,10 @@ class EMPIREOFBOSS_API UEOB_ItemDefinition : public UDataAsset
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Item")
 	FText ItemName;
+
+	/** 物品种类：装备（穿装备面板）/ 背包（装备到背包标签栏位） */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Item")
+	EEOBItemKind Kind = EEOBItemKind::Equipment;
 
 	/** 背包/装备面板里的图标 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Item")
@@ -37,11 +41,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Item")
 	FVector WorldMeshScale = FVector(1.f, 1.f, 1.f);
 
-	/** 装备槽位（戒指类选 Ring，穿戴时自动分配左右手） */
+	/** 装备槽位（戒指类选 Ring，穿戴时自动分配左右手；背包忽略此项） */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Item")
 	EEOBEquipSlot EquipSlot = EEOBEquipSlot::Weapon;
 
-	/** 固定词缀：武器攻击力、防具护甲值等，100% 生效 */
+	/** 固定词缀：武器攻击力、防具护甲值等，100% 生效（背包忽略此项） */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Item")
 	TArray<FEOBAffixValue> BaseAffixes;
 

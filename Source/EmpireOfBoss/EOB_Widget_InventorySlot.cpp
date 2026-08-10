@@ -9,18 +9,19 @@ void UEOB_Widget_InventorySlot::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// C++ 自动绑定点击，蓝图不用再连 OnClicked
+	// C++ 自动绑定左键点击，蓝图不用再连 OnClicked
 	if (Button)
 	{
 		Button->OnClicked.AddDynamic(this, &UEOB_Widget_InventorySlot::OnSlotClicked);
 	}
 }
 
-void UEOB_Widget_InventorySlot::InitInventorySlot(UEOB_InventoryComponent* Inv, int32 InSlotIndex)
+void UEOB_Widget_InventorySlot::InitInventorySlot(UEOB_InventoryComponent* Inv, int32 InTabIndex, int32 InSlotInTab)
 {
 	Mode = EEOBSlotWidgetMode::Inventory;
 	RefInventory = Inv;
-	SlotIndex = InSlotIndex;
+	TabIndex = InTabIndex;
+	SlotInTab = InSlotInTab;
 }
 
 void UEOB_Widget_InventorySlot::InitEquipmentSlot(UEOB_InventoryComponent* Inv, EEOBEquipSlot InEquipSlot)
@@ -64,12 +65,35 @@ void UEOB_Widget_InventorySlot::OnSlotClicked()
 {
 	if (!RefInventory.IsValid()) return;
 
-	if (Mode == EEOBSlotWidgetMode::Inventory)
-	{
-		RefInventory->EquipFromInventory(SlotIndex);
-	}
-	else
+	// 左键：背包格留给"抓取/拖拽"（下一步实现）；装备格暂时保留"点击卸下"作为过渡
+	if (Mode == EEOBSlotWidgetMode::Equipment)
 	{
 		RefInventory->UnequipItem(EquipSlot);
 	}
+}
+
+FReply UEOB_Widget_InventorySlot::NativeOnMouseButtonDown(const FGeometry& InGeometry,
+                                                          const FPointerEvent& InMouseEvent)
+{
+	// 右键单击背包格：装备穿到默认槽位；背包物品装到第一个空栏位
+	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton
+		&& Mode == EEOBSlotWidgetMode::Inventory
+		&& RefInventory.IsValid())
+	{
+		FEOBItemInstance Item;
+		if (RefInventory->GetItemAt(TabIndex, SlotInTab, Item) && Item.IsValid())
+		{
+			if (Item.Definition->Kind == EEOBItemKind::Bag)
+			{
+				RefInventory->EquipBagFromInventory(TabIndex, SlotInTab);
+			}
+			else
+			{
+				RefInventory->EquipFromInventory(TabIndex, SlotInTab);
+			}
+			return FReply::Handled();
+		}
+	}
+
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }

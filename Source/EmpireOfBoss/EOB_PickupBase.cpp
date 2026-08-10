@@ -48,6 +48,11 @@ void AEOB_PickupBase::SetDroppedItemDefinition(UEOB_ItemDefinition* NewDefinitio
 	ApplyDefinitionVisuals();
 }
 
+void AEOB_PickupBase::SetPresetInstance(const FEOBItemInstance& Instance)
+{
+	PresetInstance = Instance;
+}
+
 void AEOB_PickupBase::ApplyDefinitionVisuals()
 {
 	if (!DroppedItemDefinition || !PickupMesh) return;
@@ -112,28 +117,41 @@ void AEOB_PickupBase::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, 
 		}
 	}
 
-	// ===== 3. M2 新增：装备入口：掷品质 → 生成实例 → 进背包 =====
+	// ===== 3. 装备/背包入口：有预设实例原样入包，没有则掷品质现生成 =====
 	if (DroppedItemDefinition)
 	{
 		UEOB_InventoryComponent* Inv = Hero->InventoryComponent;
 		if (!Inv) return;
 
-		const EEOBRarity Rarity = UEOB_InventoryComponent::RollRarity(
-			WhiteWeight, GreenWeight, BlueWeight, GoldWeight);
-		const FEOBItemInstance NewItem = Inv->CreateItemInstance(DroppedItemDefinition, Rarity);
-		const int32 SlotIndex = Inv->AddItem(NewItem);
-
-		if (SlotIndex == INDEX_NONE)
+		FEOBItemInstance NewItem;
+		if (PresetInstance.IsValid())
 		{
-			// 背包满了：留在地上，不触发拾取表现、不销毁
+			// 玩家丢弃的物品：品质和词缀保持原样
+			NewItem = PresetInstance;
+		}
+		else
+		{
+			// 怪物掉落：现掷品质（装备=词缀数量，背包=容量）
+			const EEOBRarity Rarity = UEOB_InventoryComponent::RollRarity(
+				WhiteWeight, GreenWeight, BlueWeight, GoldWeight);
+			NewItem = Inv->CreateItemInstance(DroppedItemDefinition, Rarity);
+		}
+
+		const int32 EncodedSlot = Inv->AddItem(NewItem);
+
+		if (EncodedSlot == INDEX_NONE)
+		{
+			// 所有背包都满了：留在地上，不触发拾取表现、不销毁
 			UE_LOG(LogTemp, Warning, TEXT("[拾取] 背包已满！%s 留在原地。"),
 			       *DroppedItemDefinition->ItemName.ToString());
 			return;
 		}
 
-		UE_LOG(LogTemp, Log, TEXT("[拾取] 装备入包：%s（品质: %s）"),
+		UE_LOG(LogTemp, Log, TEXT("[拾取] 物品入包：%s（品质: %s，第 %d 页第 %d 格）"),
 		       *DroppedItemDefinition->ItemName.ToString(),
-		       *UEnum::GetValueAsString(Rarity));
+		       *UEnum::GetValueAsString(NewItem.Rarity),
+		       EncodedSlot / UEOB_InventoryComponent::SlotEncodingBase + 1,
+		       EncodedSlot % UEOB_InventoryComponent::SlotEncodingBase + 1);
 	}
 
 	// 蓝图表现钩子（音效/特效），然后销毁

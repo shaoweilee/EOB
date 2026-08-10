@@ -1,6 +1,7 @@
 #include "EOB_InventoryComponent.h"
 #include "EOB_ItemDefinition.h"
 #include "EOB_AffixTableRow.h"
+#include "EOB_PickupBase.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
 #include "Engine/DataTable.h"
@@ -15,8 +16,27 @@ void UEOB_InventoryComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 初始化固定长度背包
-	Items.SetNum(InventorySize);
+	// 初始化 12 个背包栏位（默认全部未激活）
+	Tabs.Init(FEOBInventoryTab(), NumTabs);
+
+	// 开局赠送背包：依次装进第 1、2……个栏位
+	if (StartingBagDefinition)
+	{
+		for (int32 i = 0; i < StartingBagCount && i < NumTabs; ++i)
+		{
+			const FEOBItemInstance Bag = CreateItemInstance(StartingBagDefinition, StartingBagRarity);
+			EquipBagToTab(Bag, i);
+		}
+		UE_LOG(LogTemp, Log, TEXT("[背包] 开局赠送 %d 个背包（品质 %s，每个 %d 格）"),
+		       StartingBagCount,
+		       *UEnum::GetValueAsString(StartingBagRarity),
+		       GetBagCapacity(StartingBagRarity));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error,
+		       TEXT("[背包] StartingBagDefinition 未配置！玩家开局没有任何背包，无法拾取物品。请到主角蓝图的 InventoryComponent 默认值里指定一个背包 DA（Kind=背包）。"));
+	}
 
 	// 🛡️ 防御：Live Coding 热重载偶尔会静默冲掉蓝图里配置的引用。
 	//    词缀表丢了不会崩，但所有装备会退化成"只有基础属性"，必须有报警。
@@ -27,32 +47,51 @@ void UEOB_InventoryComponent::BeginPlay()
 	}
 }
 
+// ===================== 入包 / 移除 =====================
+
 int32 UEOB_InventoryComponent::AddItem(const FEOBItemInstance& Item)
 {
 	if (!Item.IsValid()) return INDEX_NONE;
 
-	const int32 EmptySlot = FindEmptySlot();
-	if (EmptySlot == INDEX_NONE) return INDEX_NONE;
+	const int32 Encoded = FindSlotForItem(Item);
+	if (Encoded == INDEX_NONE) return INDEX_NONE;
 
-	Items[EmptySlot] = Item;
+	const int32 Tab = Encoded / SlotEncodingBase;
+	const int32 Slot = Encoded % SlotEncodingBase;
+	Tabs[Tab].Slots[Slot] = Item;
 	OnInventoryChanged.Broadcast();
-	return EmptySlot;
+	return Encoded;
 }
 
-bool UEOB_InventoryComponent::RemoveItemAt(int32 SlotIndex)
+bool UEOB_InventoryComponent::RemoveItemAt(int32 TabIndex, int32 SlotInTab)
 {
-	if (!Items.IsValidIndex(SlotIndex) || !Items[SlotIndex].IsValid()) return false;
+	if (!IsValidTab(TabIndex)) return false;
+	FEOBInventoryTab& Tab = Tabs[TabIndex];
+	if (!Tab.Slots.IsValidIndex(SlotInTab) || !Tab.Slots[SlotInTab].IsValid()) return false;
 
-	Items[SlotIndex] = FEOBItemInstance();
+	Tab.Slots[SlotInTab] = FEOBItemInstance();
 	OnInventoryChanged.Broadcast();
 	return true;
 }
 
-bool UEOB_InventoryComponent::EquipFromInventory(int32 SlotIndex)
-{
-	if (!Items.IsValidIndex(SlotIndex) || !Items[SlotIndex].IsValid()) return false;
+// ===================== 装备穿脱 =====================
 
-	FEOBItemInstance ItemToEquip = Items[SlotIndex];
+bool UEOB_InventoryComponent::EquipFromInventory(int32 TabIndex, int32 SlotInTab)
+{
+	if (!IsValidTab(TabIndex)) return false;
+	FEOBInventoryTab& Tab = Tabs[TabIndex];
+	if (!Tab.Slots.IsValidIndex(SlotInTab) || !Tab.Slots[SlotInTab].IsValid()) return false;
+
+	FEOBItemInstance ItemToEquip = Tab.Slots[SlotInTab];
+
+	// 背包不是装备，不能穿到装备面板上
+	if (ItemToEquip.Definition->Kind == EEOBItemKind::Bag)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[背包] %s 是背包，请用 EquipBagFromInventory 装进背包栏位。"),
+		       *ItemToEquip.Definition->ItemName.ToString());
+		return false;
+	}
+
 	EEOBEquipSlot TargetSlot = ItemToEquip.Definition->EquipSlot;
 
 	// 戒指自动分配：左空放左，右空放右，都满换左
@@ -67,12 +106,12 @@ bool UEOB_InventoryComponent::EquipFromInventory(int32 SlotIndex)
 	if (FEOBItemInstance* Existing = EquippedItems.Find(TargetSlot))
 	{
 		RemoveItemEffects(*Existing);
-		Items[SlotIndex] = *Existing;
+		Tab.Slots[SlotInTab] = *Existing;
 		EquippedItems.Remove(TargetSlot);
 	}
 	else
 	{
-		Items[SlotIndex] = FEOBItemInstance(); // 清空背包格
+		Tab.Slots[SlotInTab] = FEOBItemInstance(); // 清空背包格
 	}
 
 	ApplyItemEffects(ItemToEquip);
@@ -90,8 +129,9 @@ bool UEOB_InventoryComponent::UnequipItem(EEOBEquipSlot Slot)
 	FEOBItemInstance* Existing = EquippedItems.Find(Slot);
 	if (!Existing) return false;
 
-	const int32 EmptySlot = FindEmptySlot();
-	if (EmptySlot == INDEX_NONE)
+	// 和拾取走同一条归位规则：偏好页 → 未分类页 → 第一个空位页（只进已激活的页）
+	const int32 Encoded = FindSlotForItem(*Existing);
+	if (Encoded == INDEX_NONE)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[装备] 背包已满，无法卸下！"));
 		return false;
@@ -100,12 +140,279 @@ bool UEOB_InventoryComponent::UnequipItem(EEOBEquipSlot Slot)
 	FEOBItemInstance Item = *Existing;
 	RemoveItemEffects(Item);
 	EquippedItems.Remove(Slot);
-	Items[EmptySlot] = Item;
+	Tabs[Encoded / SlotEncodingBase].Slots[Encoded % SlotEncodingBase] = Item;
 
 	OnInventoryChanged.Broadcast();
 	OnEquipmentChanged.Broadcast();
 	return true;
 }
+
+// ===================== 背包（物品）穿脱 =====================
+
+bool UEOB_InventoryComponent::EquipBagFromInventory(int32 TabIndex, int32 SlotInTab)
+{
+	if (!IsValidTab(TabIndex)) return false;
+	FEOBInventoryTab& SourceTab = Tabs[TabIndex];
+	if (!SourceTab.Slots.IsValidIndex(SlotInTab) || !SourceTab.Slots[SlotInTab].IsValid()) return false;
+
+	const FEOBItemInstance Bag = SourceTab.Slots[SlotInTab];
+	if (Bag.Definition->Kind != EEOBItemKind::Bag)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[背包] %s 不是背包物品。"), *Bag.Definition->ItemName.ToString());
+		return false;
+	}
+
+	// 找第一个空栏位
+	for (int32 Tab = 0; Tab < NumTabs; ++Tab)
+	{
+		if (!Tabs[Tab].Bag.IsValid())
+		{
+			SourceTab.Slots[SlotInTab] = FEOBItemInstance(); // 先清空原格，再装包
+			EquipBagToTab(Bag, Tab);
+			UE_LOG(LogTemp, Log, TEXT("[背包] 已把 %s 装进第 %d 个栏位"),
+			       *Bag.Definition->ItemName.ToString(), Tab + 1);
+			return true;
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[背包] 12 个栏位都装满了背包，装不上了！"));
+	return false;
+}
+
+bool UEOB_InventoryComponent::EquipBagToTab(const FEOBItemInstance& Bag, int32 TabIndex)
+{
+	if (!IsValidTab(TabIndex)) return false;
+	if (!Bag.IsValid() || !Bag.Definition || Bag.Definition->Kind != EEOBItemKind::Bag) return false;
+
+	FEOBInventoryTab& Tab = Tabs[TabIndex];
+	if (Tab.Bag.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[背包] 第 %d 个栏位已有背包，请走 SwapBagOnTab 换包。"), TabIndex + 1);
+		return false;
+	}
+
+	Tab.Bag = Bag;
+	Tab.Slots.SetNum(GetBagCapacity(Bag.Rarity));
+	OnInventoryChanged.Broadcast();
+	return true;
+}
+
+bool UEOB_InventoryComponent::SwapBagOnTab(int32 TabIndex, int32 FromTab, int32 FromSlot)
+{
+	if (!IsValidTab(TabIndex) || !IsValidTab(FromTab)) return false;
+	FEOBInventoryTab& Tab = Tabs[TabIndex];
+	FEOBInventoryTab& SourceTab = Tabs[FromTab];
+
+	if (!Tab.Bag.IsValid()) return false; // 空栏位直接走 EquipBagToTab
+	if (!SourceTab.Slots.IsValidIndex(FromSlot) || !SourceTab.Slots[FromSlot].IsValid()) return false;
+
+	const FEOBItemInstance NewBag = SourceTab.Slots[FromSlot];
+	if (NewBag.Definition->Kind != EEOBItemKind::Bag) return false;
+
+	const int32 NewCap = GetBagCapacity(NewBag.Rarity);
+	const int32 OldCap = Tab.Slots.Num();
+	if (NewCap < OldCap)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[背包] 新背包（%d 格）比旧背包（%d 格）小，不能替换！"), NewCap, OldCap);
+		return false;
+	}
+
+	// 物品原样迁入新包，旧包回到新包原来所在的格子
+	const FEOBItemInstance OldBag = Tab.Bag;
+	const TArray<FEOBItemInstance> OldItems = Tab.Slots;
+
+	Tab.Bag = NewBag;
+	Tab.Slots.SetNum(NewCap);
+	for (int32 i = 0; i < OldItems.Num(); ++i)
+	{
+		Tab.Slots[i] = OldItems[i];
+	}
+
+	SourceTab.Slots[FromSlot] = OldBag;
+
+	OnInventoryChanged.Broadcast();
+	UE_LOG(LogTemp, Log, TEXT("[背包] 第 %d 个栏位换包：%s（%d 格）→ %s（%d 格），物品已迁入"),
+	       TabIndex + 1,
+	       *OldBag.Definition->ItemName.ToString(), OldCap,
+	       *NewBag.Definition->ItemName.ToString(), NewCap);
+	return true;
+}
+
+bool UEOB_InventoryComponent::UnequipBag(int32 TabIndex)
+{
+	if (!IsValidTab(TabIndex)) return false;
+	FEOBInventoryTab& Tab = Tabs[TabIndex];
+	if (!Tab.Bag.IsValid()) return false;
+
+	// 只有包内物品全部清空才能卸
+	for (const FEOBItemInstance& SlotItem : Tab.Slots)
+	{
+		if (SlotItem.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[背包] 第 %d 个栏位的背包里还有物品，清空后才能卸下！"), TabIndex + 1);
+			return false;
+		}
+	}
+
+	const FEOBItemInstance Bag = Tab.Bag;
+	const int32 Capacity = Tab.Slots.Num();
+
+	// 先摘下，再按归位规则找格；找不到就恢复
+	Tab.Bag = FEOBItemInstance();
+	Tab.Slots.Empty();
+
+	if (AddItem(Bag) == INDEX_NONE)
+	{
+		Tab.Bag = Bag;
+		Tab.Slots.SetNum(Capacity);
+		OnInventoryChanged.Broadcast();
+		UE_LOG(LogTemp, Warning, TEXT("[背包] 其他背包都满了，卸下的背包无处可放！"));
+		return false;
+	}
+
+	OnInventoryChanged.Broadcast();
+	UE_LOG(LogTemp, Log, TEXT("[背包] 已卸下第 %d 个栏位的 %s"), TabIndex + 1, *Bag.Definition->ItemName.ToString());
+	return true;
+}
+
+// ===================== 标签页查询 =====================
+
+void UEOB_InventoryComponent::SetTabPreference(int32 TabIndex, EEOBItemCategory NewPreference)
+{
+	if (!IsValidTab(TabIndex)) return;
+	Tabs[TabIndex].Preference = NewPreference;
+	// 偏好变化不改变物品位置，只影响以后的归位；无需广播
+}
+
+EEOBItemCategory UEOB_InventoryComponent::GetTabPreference(int32 TabIndex) const
+{
+	if (!IsValidTab(TabIndex)) return EEOBItemCategory::Uncategorized;
+	return Tabs[TabIndex].Preference;
+}
+
+bool UEOB_InventoryComponent::IsTabActive(int32 TabIndex) const
+{
+	return IsValidTab(TabIndex) && Tabs[TabIndex].Bag.IsValid();
+}
+
+int32 UEOB_InventoryComponent::GetTabCapacity(int32 TabIndex) const
+{
+	if (!IsTabActive(TabIndex)) return 0;
+	return Tabs[TabIndex].Slots.Num();
+}
+
+bool UEOB_InventoryComponent::GetItemAt(int32 TabIndex, int32 SlotInTab, FEOBItemInstance& OutItem) const
+{
+	if (!IsValidTab(TabIndex)) return false;
+	const FEOBInventoryTab& Tab = Tabs[TabIndex];
+	if (!Tab.Slots.IsValidIndex(SlotInTab)) return false;
+	OutItem = Tab.Slots[SlotInTab];
+	return true;
+}
+
+int32 UEOB_InventoryComponent::FindEmptySlotInTab(int32 TabIndex) const
+{
+	if (!IsTabActive(TabIndex)) return INDEX_NONE;
+
+	const TArray<FEOBItemInstance>& Slots = Tabs[TabIndex].Slots;
+	for (int32 i = 0; i < Slots.Num(); ++i)
+	{
+		if (!Slots[i].IsValid()) return i;
+	}
+	return INDEX_NONE;
+}
+
+bool UEOB_InventoryComponent::TabHasEmptySlot(int32 TabIndex) const
+{
+	return FindEmptySlotInTab(TabIndex) != INDEX_NONE;
+}
+
+// ===================== 移动/交换 =====================
+
+bool UEOB_InventoryComponent::MoveOrSwapItem(int32 FromTab, int32 FromSlot, int32 ToTab, int32 ToSlot)
+{
+	if (!IsTabActive(FromTab) || !IsTabActive(ToTab)) return false;
+	FEOBInventoryTab& SourceTab = Tabs[FromTab];
+	FEOBInventoryTab& TargetTab = Tabs[ToTab];
+	if (!SourceTab.Slots.IsValidIndex(FromSlot) || !TargetTab.Slots.IsValidIndex(ToSlot)) return false;
+	if (FromTab == ToTab && FromSlot == ToSlot) return false;
+	if (!SourceTab.Slots[FromSlot].IsValid()) return false;
+
+	// 目标格有货 = 互换；目标格为空 = 移动（空实例换过去等价于清空原格）
+	const FEOBItemInstance Temp = SourceTab.Slots[FromSlot];
+	SourceTab.Slots[FromSlot] = TargetTab.Slots[ToSlot];
+	TargetTab.Slots[ToSlot] = Temp;
+
+	OnInventoryChanged.Broadcast();
+	return true;
+}
+
+bool UEOB_InventoryComponent::MoveItemToTab(int32 FromTab, int32 FromSlot, int32 ToTab)
+{
+	if (!IsTabActive(FromTab) || !IsTabActive(ToTab)) return false;
+	FEOBInventoryTab& SourceTab = Tabs[FromTab];
+	if (!SourceTab.Slots.IsValidIndex(FromSlot) || !SourceTab.Slots[FromSlot].IsValid()) return false;
+
+	const int32 EmptySlot = FindEmptySlotInTab(ToTab);
+	if (EmptySlot == INDEX_NONE) return false;
+
+	Tabs[ToTab].Slots[EmptySlot] = SourceTab.Slots[FromSlot];
+	SourceTab.Slots[FromSlot] = FEOBItemInstance();
+
+	OnInventoryChanged.Broadcast();
+	return true;
+}
+
+// ===================== 丢弃 =====================
+
+AEOB_PickupBase* UEOB_InventoryComponent::DropItemToWorld(int32 TabIndex, int32 SlotInTab)
+{
+	if (!DropPickupClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[背包] DropPickupClass 未配置！请到主角蓝图的 InventoryComponent 默认值里指定一个装备拾取物类（如 BP_Pickup_Sword）。"));
+		return nullptr;
+	}
+	if (!IsTabActive(TabIndex)) return nullptr;
+	FEOBInventoryTab& Tab = Tabs[TabIndex];
+	if (!Tab.Slots.IsValidIndex(SlotInTab) || !Tab.Slots[SlotInTab].IsValid()) return nullptr;
+
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor) return nullptr;
+	UWorld* World = OwnerActor->GetWorld();
+	if (!World) return nullptr;
+
+	const FEOBItemInstance Item = Tab.Slots[SlotInTab];
+
+	// 落点：主人面前 80cm，向下射线找地面（和怪物掉落同一通道）
+	const FVector TraceStart = OwnerActor->GetActorLocation()
+		+ OwnerActor->GetActorForwardVector() * 80.f
+		+ FVector(0.f, 0.f, 100.f);
+	const FVector TraceEnd = TraceStart - FVector(0.f, 0.f, 600.f);
+
+	FVector SpawnLoc = TraceStart;
+	FHitResult Hit;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(OwnerActor);
+	if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_GameTraceChannel2, QueryParams))
+	{
+		SpawnLoc = Hit.ImpactPoint + FVector(0.f, 0.f, 2.f);
+	}
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AEOB_PickupBase* Pickup = World->SpawnActor<AEOB_PickupBase>(
+		DropPickupClass, SpawnLoc, FRotator::ZeroRotator, Params);
+	if (!Pickup) return nullptr;
+
+	Pickup->SetDroppedItemDefinition(Item.Definition); // 套用 DA 外观（网格/旋转/缩放/落地）
+	Pickup->SetPresetInstance(Item);                   // 记住已掷出的品质 + 词缀，再捡起不重新掷
+
+	RemoveItemAt(TabIndex, SlotInTab);
+	UE_LOG(LogTemp, Log, TEXT("[背包] 已把 %s 丢到地上"), *Item.Definition->ItemName.ToString());
+	return Pickup;
+}
+
+// ===================== 实例生成 =====================
 
 FEOBItemInstance UEOB_InventoryComponent::CreateItemInstance(UEOB_ItemDefinition* Def, EEOBRarity Rarity)
 {
@@ -113,25 +420,25 @@ FEOBItemInstance UEOB_InventoryComponent::CreateItemInstance(UEOB_ItemDefinition
 	NewItem.Definition = Def;
 	NewItem.Rarity = Rarity;
 
-	// 🔍 词缀诊断日志（定位"装备只剩基础属性"用，修好可删）
-	FString RarityName;
-	switch (Rarity)
-	{
-	case EEOBRarity::Green: RarityName = TEXT("绿");
-		break;
-	case EEOBRarity::Blue: RarityName = TEXT("蓝");
-		break;
-	case EEOBRarity::Gold: RarityName = TEXT("金");
-		break;
-	default: RarityName = TEXT("白");
-		break;
-	}
-	UE_LOG(LogTemp, Warning, TEXT("[词缀] 生成【%s】品质=%s，词缀表=%s"),
-	       Def ? *Def->ItemName.ToString() : TEXT("null"),
-	       *RarityName,
-	       AffixTable ? *AffixTable->GetName() : TEXT("❌未配置！"));
+	if (!Def) return NewItem;
 
-	if (!Def || !AffixTable) return NewItem;
+	// 背包不 roll 词缀：品质即容量
+	if (Def->Kind == EEOBItemKind::Bag)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[背包] 生成背包【%s】品质=%s，容量 %d 格"),
+		       *Def->ItemName.ToString(),
+		       *UEnum::GetValueAsString(Rarity),
+		       GetBagCapacity(Rarity));
+		return NewItem;
+	}
+
+	if (!AffixTable)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[词缀] 生成【%s】品质=%s，词缀表=❌未配置！"),
+		       *Def->ItemName.ToString(),
+		       *UEnum::GetValueAsString(Rarity));
+		return NewItem;
+	}
 
 	// 1. 品质决定词缀数量（TL2 手感：白 0 / 绿 1 / 蓝 2~3 / 金 4~5）
 	int32 AffixCount = 0;
@@ -160,9 +467,6 @@ FEOBItemInstance UEOB_InventoryComponent::CreateItemInstance(UEOB_ItemDefinition
 			Candidates.Add(Row);
 		}
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("[词缀] 应 roll %d 条，词缀表共 %d 行，符合槽位的候选 %d 行"),
-	       AffixCount, AllRows.Num(), Candidates.Num());
 
 	// 3. 加权抽取，抽中即移出候选（同一件装备不出重复词缀）
 	for (int32 i = 0; i < AffixCount && Candidates.Num() > 0; ++i)
@@ -195,7 +499,10 @@ FEOBItemInstance UEOB_InventoryComponent::CreateItemInstance(UEOB_ItemDefinition
 		Candidates.RemoveAt(Picked);
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("[词缀] 最终 roll 出 %d 条"), NewItem.RolledAffixes.Num());
+	UE_LOG(LogTemp, Log, TEXT("[词缀] 生成【%s】品质=%s，roll 出 %d 条词缀"),
+	       *Def->ItemName.ToString(),
+	       *UEnum::GetValueAsString(Rarity),
+	       NewItem.RolledAffixes.Num());
 
 	return NewItem;
 }
@@ -211,6 +518,8 @@ EEOBRarity UEOB_InventoryComponent::RollRarity(float WhiteWeight, float GreenWei
 	if ((Roll -= BlueWeight) < 0.f) return EEOBRarity::Blue;
 	return EEOBRarity::Gold;
 }
+
+// ===================== 内部工具 =====================
 
 void UEOB_InventoryComponent::ApplyItemEffects(FEOBItemInstance& Item)
 {
@@ -283,11 +592,44 @@ UAbilitySystemComponent* UEOB_InventoryComponent::GetOwnerASC() const
 	return nullptr;
 }
 
-int32 UEOB_InventoryComponent::FindEmptySlot() const
+int32 UEOB_InventoryComponent::FindSlotForItem(const FEOBItemInstance& Item) const
 {
-	for (int32 i = 0; i < Items.Num(); ++i)
+	if (!Item.IsValid() || !Item.Definition) return INDEX_NONE;
+
+	// 背包物品没有分类归属，按"未分类"参与归位
+	const EEOBItemCategory Category = (Item.Definition->Kind == EEOBItemKind::Bag)
+		                                  ? EEOBItemCategory::Uncategorized
+		                                  : EquipSlotToCategory(Item.Definition->EquipSlot);
+
+	// 1. 偏好该分类的已激活页（按页号顺序取第一个有空位的）
+	if (Category != EEOBItemCategory::Uncategorized)
 	{
-		if (!Items[i].IsValid()) return i;
+		for (int32 Tab = 0; Tab < NumTabs; ++Tab)
+		{
+			if (IsTabActive(Tab) && Tabs[Tab].Preference == Category)
+			{
+				const int32 Slot = FindEmptySlotInTab(Tab);
+				if (Slot != INDEX_NONE) return Tab * SlotEncodingBase + Slot;
+			}
+		}
 	}
+
+	// 2. "未分类"偏好的已激活页
+	for (int32 Tab = 0; Tab < NumTabs; ++Tab)
+	{
+		if (IsTabActive(Tab) && Tabs[Tab].Preference == EEOBItemCategory::Uncategorized)
+		{
+			const int32 Slot = FindEmptySlotInTab(Tab);
+			if (Slot != INDEX_NONE) return Tab * SlotEncodingBase + Slot;
+		}
+	}
+
+	// 3. 任意有空位的已激活页
+	for (int32 Tab = 0; Tab < NumTabs; ++Tab)
+	{
+		const int32 Slot = FindEmptySlotInTab(Tab);
+		if (Slot != INDEX_NONE) return Tab * SlotEncodingBase + Slot;
+	}
+
 	return INDEX_NONE;
 }

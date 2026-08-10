@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "EOB_ItemTypes.h"
 #include "EOB_PickupBase.generated.h"
 
 class USphereComponent;
@@ -18,6 +19,8 @@ class UEOB_ItemDefinition;
  *  - BP_Pickup_Gold：设置 GoldValue > 0，拾取后金币进 GameInstance
  *  - BP_Pickup_Potion：设置 GrantedEffectClass 为一个 Instant 回血 GE
  *  - 装备拾取物：设置 DroppedItemDefinition，拾取时掷品质进背包
+ *
+ * 玩家丢弃的物品：生成后调用 SetPresetInstance，拾取时原样入包，不重新掷品质和词缀。
  */
 UCLASS()
 class EMPIREOFBOSS_API AEOB_PickupBase : public AActor
@@ -35,6 +38,9 @@ public:
 
 	/** 把网格按包围盒"落地"：让网格最低点贴到 Actor 原点（生成时原点已被射线贴到地面） */
 	void SnapMeshToGround();
+
+	/** 设置预设实例（玩家丢弃的物品用）：拾取时原样入包，保留品质和词缀 */
+	void SetPresetInstance(const FEOBItemInstance& Instance);
 
 protected:
 	virtual void BeginPlay() override;
@@ -59,9 +65,13 @@ protected:
 
 	// ===================== M2 新增：装备掉落 =====================
 
-	/** 装备定义（设置后此拾取物变为装备：拾取时掷品质进背包） */
+	/** 装备定义（设置后此拾取物变为装备：拾取时掷品质进背包；背包 DA 同理，品质=容量） */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Pickup")
 	TObjectPtr<UEOB_ItemDefinition> DroppedItemDefinition;
+
+	/** 预设实例：非空时拾取直接入包它（玩家丢弃的物品），跳过掷品质/词缀 */
+	UPROPERTY(BlueprintReadOnly, Category = "EOB|Pickup")
+	FEOBItemInstance PresetInstance;
 
 	/** 品质权重：白/绿/蓝/金（按比例生效，不用凑满 100） */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Pickup")
