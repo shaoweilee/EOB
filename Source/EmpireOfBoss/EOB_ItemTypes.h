@@ -47,7 +47,7 @@ enum class EEOBEquipSlot : uint8
 UENUM(BlueprintType)
 enum class EEOBItemCategory : uint8
 {
-	Uncategorized UMETA(DisplayName = "未分类"),
+	Uncategorized UMETA(DisplayName = "任意"),
 	Weapon        UMETA(DisplayName = "武器"),
 	Shield        UMETA(DisplayName = "盾牌"),
 	Helmet        UMETA(DisplayName = "头盔"),

@@ -63,7 +63,7 @@ struct FEOBInventoryTab
 /**
  * 背包与装备组件：挂在主角身上。
  * 背包 = 12 个背包栏位（标签页），每个栏位装备一个背包物品，容量由背包品质决定。
- * 入包按"偏好页 → 未分类页 → 第一个空位页"的规则，只进入已激活（有背包）的页。
+ * 入包按"偏好页 → 任意页 → 第一个空位页"的规则，只进入已激活（有背包）的页。
  * 装备 = 槽位 → 物品实例 的映射；穿上灌 Infinite GE，卸下按句柄移除。
  */
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
@@ -214,7 +214,7 @@ private:
 	void RemoveItemEffects(FEOBItemInstance& Item);
 	UAbilitySystemComponent* GetOwnerASC() const;
 
-	/** 归位规则：偏好该分类的已激活页 → "未分类"偏好的已激活页 → 任意有空位的已激活页，返回 页号×64+页内格号 */
+	/** 归位规则：偏好该分类的已激活页 → "任意"偏好的已激活页 → 任意有空位的已激活页，返回 页号×64+页内格号 */
 	int32 FindSlotForItem(const FEOBItemInstance& Item) const;
 
 	bool IsValidTab(int32 TabIndex) const { return TabIndex >= 0 && TabIndex < NumTabs; }

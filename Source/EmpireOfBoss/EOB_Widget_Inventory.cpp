@@ -109,7 +109,29 @@ void UEOB_Widget_Inventory::SetCurrentTab(int32 NewTab)
 	}
 
 	CurrentTabIndex = NewTab;
+	CloseAllTabDropdowns(); // 切页时收起所有"偏好"下拉面板
 	RefreshUI();
+}
+
+void UEOB_Widget_Inventory::CloseAllTabDropdowns(int32 ExceptTabIndex)
+{
+	auto CloseInBox = [ExceptTabIndex](UVerticalBox* Box)
+	{
+		if (!Box) return;
+		for (UWidget* Child : Box->GetAllChildren())
+		{
+			if (UEOB_Widget_InventoryTab* TabWidget = Cast<UEOB_Widget_InventoryTab>(Child))
+			{
+				if (TabWidget->GetTabIndex() != ExceptTabIndex)
+				{
+					TabWidget->CloseDropdown();
+				}
+			}
+		}
+	};
+
+	CloseInBox(VerticalBox_TabsLeft);
+	CloseInBox(VerticalBox_TabsRight);
 }
 
 void UEOB_Widget_Inventory::RefreshTabs()

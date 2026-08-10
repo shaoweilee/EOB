@@ -39,6 +39,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "EOB|UI")
 	int32 GetCurrentTab() const { return CurrentTabIndex; }
 
+	/** 收起所有页签的"偏好"下拉面板（ExceptTabIndex 除外，-1 = 全部收起） */
+	void CloseAllTabDropdowns(int32 ExceptTabIndex = -1);
+
 protected:
 	virtual void NativeConstruct() override;
 

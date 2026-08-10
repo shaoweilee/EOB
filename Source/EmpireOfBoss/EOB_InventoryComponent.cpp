@@ -129,7 +129,7 @@ bool UEOB_InventoryComponent::UnequipItem(EEOBEquipSlot Slot)
 	FEOBItemInstance* Existing = EquippedItems.Find(Slot);
 	if (!Existing) return false;
 
-	// 和拾取走同一条归位规则：偏好页 → 未分类页 → 第一个空位页（只进已激活的页）
+	// 和拾取走同一条归位规则：偏好页 → 任意页 → 第一个空位页（只进已激活的页）
 	const int32 Encoded = FindSlotForItem(*Existing);
 	if (Encoded == INDEX_NONE)
 	{
@@ -596,7 +596,7 @@ int32 UEOB_InventoryComponent::FindSlotForItem(const FEOBItemInstance& Item) con
 {
 	if (!Item.IsValid() || !Item.Definition) return INDEX_NONE;
 
-	// 背包物品没有分类归属，按"未分类"参与归位
+	// 背包物品没有分类归属，按"任意"参与归位
 	const EEOBItemCategory Category = (Item.Definition->Kind == EEOBItemKind::Bag)
 		                                  ? EEOBItemCategory::Uncategorized
 		                                  : EquipSlotToCategory(Item.Definition->EquipSlot);
@@ -614,7 +614,7 @@ int32 UEOB_InventoryComponent::FindSlotForItem(const FEOBItemInstance& Item) con
 		}
 	}
 
-	// 2. "未分类"偏好的已激活页
+	// 2. "任意"偏好的已激活页
 	for (int32 Tab = 0; Tab < NumTabs; ++Tab)
 	{
 		if (IsTabActive(Tab) && Tabs[Tab].Preference == EEOBItemCategory::Uncategorized)

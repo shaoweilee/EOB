@@ -1,15 +1,16 @@
 #include "EOB_Widget_InventoryTab.h"
 #include "Components/Button.h"
-#include "Components/TextBlock.h"
-#include "Components/ComboBoxString.h"
+#include "Components/Image.h"
+#include "Components/VerticalBox.h"
 #include "EOB_InventoryComponent.h"
 #include "EOB_Widget_Inventory.h"
+#include "EOB_Widget_PreferenceOption.h"
 
 namespace EOBTabUI
 {
-	/** 下拉框选项文字，顺序与 EEOBItemCategory 枚举一一对应 */
+	/** 下拉选项文字，顺序与 EEOBItemCategory 枚举一一对应 */
 	static const FString CategoryNames[] = {
-		TEXT("未分类"), TEXT("武器"), TEXT("盾牌"), TEXT("头盔"), TEXT("胸甲"),
+		TEXT("任意"), TEXT("武器"), TEXT("盾牌"), TEXT("头盔"), TEXT("胸甲"),
 		TEXT("手套"), TEXT("鞋子"), TEXT("腰带"), TEXT("项链"), TEXT("戒指")
 	};
 	static constexpr int32 CategoryCount = 10;
@@ -24,14 +25,30 @@ void UEOB_Widget_InventoryTab::NativeConstruct()
 		Button_Tab->OnClicked.AddDynamic(this, &UEOB_Widget_InventoryTab::OnTabClicked);
 	}
 
-	if (ComboBox_Preference)
+	if (Button_Arrow)
 	{
-		ComboBox_Preference->ClearOptions();
+		Button_Arrow->OnClicked.AddDynamic(this, &UEOB_Widget_InventoryTab::OnArrowClicked);
+	}
+
+	// 下拉面板默认收起，并往里填 10 行"图标+文字"选项
+	if (Panel_Dropdown)
+	{
+		Panel_Dropdown->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	if (Panel_Dropdown && VerticalBox_Options && PreferenceOptionClass)
+	{
+		VerticalBox_Options->ClearChildren();
 		for (int32 i = 0; i < EOBTabUI::CategoryCount; ++i)
 		{
-			ComboBox_Preference->AddOption(EOBTabUI::CategoryNames[i]);
+			UEOB_Widget_PreferenceOption* Option = CreateWidget<UEOB_Widget_PreferenceOption>(
+				this, PreferenceOptionClass);
+			if (!Option) continue;
+
+			UTexture2D* Icon = CategoryIcons.IsValidIndex(i) ? CategoryIcons[i].Get() : nullptr;
+			Option->InitOption(this, i, Icon, FText::FromString(EOBTabUI::CategoryNames[i]));
+			VerticalBox_Options->AddChild(Option);
 		}
-		ComboBox_Preference->OnSelectionChanged.AddDynamic(this, &UEOB_Widget_InventoryTab::OnPreferenceChanged);
 	}
 }
 
@@ -53,50 +70,92 @@ void UEOB_Widget_InventoryTab::RefreshTab()
 	const int32 PrefIndex = FMath::Clamp(static_cast<int32>(Pref), 0, EOBTabUI::CategoryCount - 1);
 	const bool bIsCurrent = RefPanel.IsValid() && RefPanel->GetCurrentTab() == TabIndex;
 
-	// 按钮文字 = 偏好分类名；当前页金色高亮，普通页白色
-	if (Text_TabName)
+	// 页签图标 = 当前偏好分类的图标；当前页染金色、未激活染灰色、普通页白色
+	if (Image_PrefIcon)
 	{
-		Text_TabName->SetText(FText::FromString(EOBTabUI::CategoryNames[PrefIndex]));
-		Text_TabName->SetColorAndOpacity(FSlateColor(
-			bIsCurrent ? FLinearColor(1.f, 0.8f, 0.2f) : FLinearColor::White));
+		UTexture2D* Icon = CategoryIcons.IsValidIndex(PrefIndex) ? CategoryIcons[PrefIndex].Get() : nullptr;
+		if (Icon)
+		{
+			Image_PrefIcon->SetBrushFromTexture(Icon);
+			Image_PrefIcon->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+
+			FLinearColor Tint = FLinearColor::White;
+			if (!bActive)
+			{
+				Tint = FLinearColor(0.35f, 0.35f, 0.35f);
+			}
+			else if (bIsCurrent)
+			{
+				Tint = FLinearColor(1.f, 0.8f, 0.2f);
+			}
+			Image_PrefIcon->SetColorAndOpacity(Tint);
+		}
+		else
+		{
+			Image_PrefIcon->SetVisibility(ESlateVisibility::Hidden);
+		}
 	}
 
-	// 未激活（没装背包）的页：按钮和下拉都禁用，置灰
+	// 未激活（没装背包）的页：两个按钮都禁用
 	if (Button_Tab)
 	{
 		Button_Tab->SetIsEnabled(bActive);
 	}
-	if (ComboBox_Preference)
+	if (Button_Arrow)
 	{
-		ComboBox_Preference->SetIsEnabled(bActive);
-		// SetSelectedOption 会触发 OnSelectionChanged（Direct 类型），那边已做忽略处理
-		ComboBox_Preference->SetSelectedOption(EOBTabUI::CategoryNames[PrefIndex]);
+		Button_Arrow->SetIsEnabled(bActive);
 	}
+}
+
+void UEOB_Widget_InventoryTab::CloseDropdown()
+{
+	if (Panel_Dropdown)
+	{
+		Panel_Dropdown->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void UEOB_Widget_InventoryTab::OnPreferenceOptionChosen(int32 CategoryIndex)
+{
+	if (RefInventory.IsValid())
+	{
+		RefInventory->SetTabPreference(TabIndex, static_cast<EEOBItemCategory>(CategoryIndex));
+		const int32 ClampedIndex = FMath::Clamp(CategoryIndex, 0, EOBTabUI::CategoryCount - 1);
+		UE_LOG(LogTemp, Log, TEXT("[背包 UI] 第 %d 页偏好设为【%s】"), TabIndex + 1, *EOBTabUI::CategoryNames[ClampedIndex]);
+	}
+
+	RefreshTab(); // 页签图标立刻跟着换
+	CloseDropdown(); // 选完收起下拉
 }
 
 void UEOB_Widget_InventoryTab::OnTabClicked()
 {
 	if (RefPanel.IsValid())
 	{
-		// SetCurrentTab 内部会拒绝未激活的页
+		// SetCurrentTab 内部会拒绝未激活的页，并顺手收起所有下拉面板
 		RefPanel->SetCurrentTab(TabIndex);
 	}
 }
 
-void UEOB_Widget_InventoryTab::OnPreferenceChanged(FString SelectedItem, ESelectInfo::Type SelectionType)
+void UEOB_Widget_InventoryTab::OnArrowClicked()
 {
-	// 代码里 SetSelectedOption 引发的回调不处理（那是回显，不是玩家选择）
-	if (SelectionType == ESelectInfo::Direct || !RefInventory.IsValid()) return;
+	ToggleDropdown();
+}
 
-	for (int32 i = 0; i < EOBTabUI::CategoryCount; ++i)
+void UEOB_Widget_InventoryTab::ToggleDropdown()
+{
+	if (!Panel_Dropdown) return;
+
+	if (Panel_Dropdown->GetVisibility() == ESlateVisibility::Visible)
 	{
-		if (EOBTabUI::CategoryNames[i] == SelectedItem)
-		{
-			RefInventory->SetTabPreference(TabIndex, static_cast<EEOBItemCategory>(i));
-			UE_LOG(LogTemp, Log, TEXT("[背包 UI] 第 %d 页偏好设为【%s】"), TabIndex + 1, *SelectedItem);
-			break;
-		}
+		CloseDropdown();
+		return;
 	}
 
-	RefreshTab(); // 按钮名跟着变
+	// 同时只开一个下拉：让面板收起其他页签的
+	if (RefPanel.IsValid())
+	{
+		RefPanel->CloseAllTabDropdowns(TabIndex);
+	}
+	Panel_Dropdown->SetVisibility(ESlateVisibility::Visible);
 }
