@@ -7,6 +7,7 @@
 
 class UButton;
 class UImage;
+class USizeBox;
 class UEOB_InventoryComponent;
 
 /** 格子工作模式：背包格 / 装备格 */
@@ -21,6 +22,10 @@ enum class EEOBSlotWidgetMode : uint8
  * 背包/装备格子基类：逻辑全在 C++，蓝图子类只负责画。
  * 蓝图里必须包含四个同名控件：Button、Image_icon、Image_frame、Image_glow（BindWidget 自动绑定）
  * 层级从下到上：Image_glow（径向辉光）→ Image_frame（品质边框）→ Button（透明，管点击）→ Image_icon
+ *
+ * 可选控件：SizeBox_Root（根尺寸框，勾"是变量"并命名）。
+ * 皮肤本身不定死尺寸——物品栏创建格子时调用 SetSlotDesiredSize 定成 110×110；
+ * 装备面板不调用，格子保持设计器里的大小。
  *
  * 交互约定：
  *  - 右键单击背包格：装备穿到默认槽位；背包物品装到第一个空背包栏位
@@ -41,11 +46,21 @@ public:
 	/** 刷新显示（图标 + 品质边框/辉光染色） */
 	void UpdateSlot(const FEOBItemInstance& Item);
 
+	/**
+	 * 由"使用者"设定这个格子实例的期望尺寸（只影响本实例，不影响皮肤和其他面板）。
+	 * 物品栏调用它把格子定成 110×110；装备面板不调用，格子保持原样。
+	 */
+	void SetSlotDesiredSize(float InSize);
+
 protected:
 	virtual void NativeConstruct() override;
 
 	/** 右键单击走这里（Button 只响应左键，右键会冒泡到控件自身） */
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+	/** 根尺寸框（可选绑定：蓝图里把根尺寸框勾"是变量"、命名 SizeBox_Root 即可） */
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "EOB|UI")
+	TObjectPtr<USizeBox> SizeBox_Root;
 
 	UPROPERTY(meta = (BindWidget), BlueprintReadOnly, Category = "EOB|UI")
 	TObjectPtr<UButton> Button;

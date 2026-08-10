@@ -69,6 +69,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
 	int32 GridColumns = 8;
 
+	/** 物品栏格子的边长（像素）。只作用于物品栏，装备面板格子不受影响 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
+	float InventorySlotSize = 110.f;
+
 	/** 当前显示的标签页（0~11），默认第 1 页 */
 	UPROPERTY(BlueprintReadOnly, Category = "EOB|UI")
 	int32 CurrentTabIndex = 0;

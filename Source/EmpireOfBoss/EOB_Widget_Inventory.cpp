@@ -26,35 +26,36 @@ void UEOB_Widget_Inventory::NativeConstruct()
 	// ── 格子网格：按内容自适应高度，杜绝“行数少时每行被拉高” ──
 	// UniformGridPanel 会把自己拿到的全部空间平均分给【现有】的行，
 	// 所以 20 格（3 行）时每行会被分到 440/3 ≈ 146 高。
-	// 把它的画布槽改成“大小到内容”后，网格高度 = 行数 × 格子期望高度。
+	// 勾了“大小到内容”后，网格高度 = 行数 × 格子期望高度。
 	if (GridPanel_Items)
 	{
 		if (UCanvasPanelSlot* GridSlot = Cast<UCanvasPanelSlot>(GridPanel_Items->Slot))
 		{
-			const FAnchors Anchors = GridSlot->GetAnchors();
-			const bool bTopLeftAnchors = Anchors.Minimum.Equals(FVector2D(0.f, 0.f))
-				&& Anchors.Maximum.Equals(FVector2D(0.f, 0.f));
+			// 设计器里已经手动勾好就不用管（锚点/位置也在设计器里摆好了）
+			if (!GridSlot->GetAutoSize())
+			{
+				const FAnchors Anchors = GridSlot->GetAnchors();
+				const bool bTopLeftAnchors = Anchors.Minimum.Equals(FVector2D(0.f, 0.f))
+					&& Anchors.Maximum.Equals(FVector2D(0.f, 0.f));
 
-			if (bTopLeftAnchors && !GridSlot->GetAutoSize())
-			{
-				// 先换算出内容当前的左上角，设为新位置，避免网格位置跳变
-				const FVector2D TopLeft = GridSlot->GetPosition() - GridSlot->GetAlignment() * GridSlot->GetSize();
-				GridSlot->SetAlignment(FVector2D(0.f, 0.f));
-				GridSlot->SetPosition(TopLeft);
-				GridSlot->SetAutoSize(true);
-			}
-			else if (!bTopLeftAnchors)
-			{
-				UE_LOG(LogTemp, Warning,
-				       TEXT(
-					       "[背包 UI] GridPanel_Items 的画布槽锚点不在左上角，请在 WBP_Inventory 里手动：锚点改左上、对齐 (0,0)、勾选“大小到内容”，再把位置设成网格现在的左上角。"
-				       ));
+				if (bTopLeftAnchors)
+				{
+					// 保险措施：左上角锚点且没勾时，自动换算位置并开启
+					const FVector2D TopLeft = GridSlot->GetPosition() - GridSlot->GetAlignment() * GridSlot->GetSize();
+					GridSlot->SetAlignment(FVector2D(0.f, 0.f));
+					GridSlot->SetPosition(TopLeft);
+					GridSlot->SetAutoSize(true);
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning,
+					       TEXT("[背包 UI] GridPanel_Items 没勾“大小到内容”，不满 32 格时格子会被拉伸，请在 WBP_Inventory 里勾选它。"));
+				}
 			}
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning,
-			       TEXT("[背包 UI] GridPanel_Items 的父槽不是画布槽，请在 WBP_Inventory 里把它放进画布面板并勾选“大小到内容”，否则不满 32 格时格子会被拉伸。"));
+			UE_LOG(LogTemp, Warning, TEXT("[背包 UI] GridPanel_Items 的父槽不是画布槽，请在 WBP_Inventory 里把它放进画布面板并勾选“大小到内容”。"));
 		}
 	}
 
@@ -159,6 +160,9 @@ void UEOB_Widget_Inventory::RefreshUI()
 
 			FEOBItemInstance Item;
 			RefInventory->GetItemAt(CurrentTabIndex, i, Item);
+
+			// 物品栏统一把格子实例定成 110×110（皮肤本身不定死，装备面板不受影响）
+			SlotWidget->SetSlotDesiredSize(InventorySlotSize);
 
 			SlotWidget->InitInventorySlot(RefInventory, CurrentTabIndex, i);
 			SlotWidget->UpdateSlot(Item);

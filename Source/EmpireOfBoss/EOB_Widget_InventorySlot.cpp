@@ -1,6 +1,7 @@
 #include "EOB_Widget_InventorySlot.h"
 #include "Components/Button.h"
 #include "Components/Image.h"
+#include "Components/SizeBox.h"
 #include "EOB_InventoryComponent.h"
 #include "EOB_ItemDefinition.h"
 #include "EOB_ItemFunctionLibrary.h"
@@ -29,6 +30,16 @@ void UEOB_Widget_InventorySlot::InitEquipmentSlot(UEOB_InventoryComponent* Inv, 
 	Mode = EEOBSlotWidgetMode::Equipment;
 	RefInventory = Inv;
 	EquipSlot = InEquipSlot;
+}
+
+void UEOB_Widget_InventorySlot::SetSlotDesiredSize(float InSize)
+{
+	// 只对本实例生效：装备面板不调用这个方法，格子大小不受影响
+	if (SizeBox_Root)
+	{
+		SizeBox_Root->SetWidthOverride(InSize);
+		SizeBox_Root->SetHeightOverride(InSize);
+	}
 }
 
 void UEOB_Widget_InventorySlot::UpdateSlot(const FEOBItemInstance& Item)
