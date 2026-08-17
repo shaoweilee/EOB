@@ -2,8 +2,8 @@
 #include "Components/Image.h"
 #include "Components/SizeBox.h"
 #include "Blueprint/WidgetTree.h"
-#include "Blueprint/WidgetLayoutLibrary.h"
 #include "Framework/Application/SlateApplication.h"
+#include "GameFramework/PlayerController.h"
 
 void UEOB_Widget_HeldItemIcon::NativeConstruct()
 {
@@ -58,13 +58,14 @@ void UEOB_Widget_HeldItemIcon::ShowIcon(UTexture2D* Icon, float InSize)
 
 	SetVisibility(ESlateVisibility::HitTestInvisible); // 显示但不挡任何点击
 
-	// 立刻摆到鼠标当前位置（不用等下一帧 Tick）
+	// 校准两套坐标系的差值，然后立刻把图标摆到鼠标当前位置（不用等下一帧 Tick）
+	CalibrateCursorSpaceOffset();
 	SyncPositionToCursor();
 
-	UE_LOG(LogTemp, Log, TEXT("[手持] ShowIcon：贴图=%s，边长=%.0f，期望尺寸=(%.0f, %.0f)"),
+	UE_LOG(LogTemp, Log, TEXT("[手持] ShowIcon：贴图=%s，边长=%.0f，坐标差值=(%.0f, %.0f)"),
 	       Icon ? TEXT("有效") : TEXT("空！"),
 	       IconSize,
-	       GetDesiredSize().X, GetDesiredSize().Y);
+	       CursorSpaceOffset.X, CursorSpaceOffset.Y);
 }
 
 void UEOB_Widget_HeldItemIcon::HideIcon()
@@ -90,24 +91,34 @@ void UEOB_Widget_HeldItemIcon::NativeTick(const FGeometry& MyGeometry, float InD
 	}
 }
 
-bool UEOB_Widget_HeldItemIcon::GetLiveMousePositionOnViewport(FVector2D& OutViewportPos) const
+void UEOB_Widget_HeldItemIcon::CalibrateCursorSpaceOffset()
 {
-	if (!FSlateApplication::IsInitialized()) return false;
+	// PC->GetMousePosition 的坐标空间与 SetPositionInViewport 完全对齐（抓取模式已验证对准），
+	// 但左键按住被按钮捕获时它会冻结；FSlateApplication::GetCursorPos 永远实时但坐标系不同。
+	// 两者的差是固定值（窗口原点等因素），在这里一次性校准，之后每帧用实时光标 + 差值即可。
+	CursorSpaceOffset = FVector2D::ZeroVector;
 
-	// 关键：必须用 FSlateApplication 的光标位置（桌面坐标，每帧实时更新）。
-	// 不能用 PlayerController::GetMousePosition——它读的是视口缓存的鼠标坐标，
-	// 左键按住时 UMG 按钮捕获了鼠标，那份缓存会被冻结在按下的位置（拖拽时图标钉在原地就是它干的）。
-	const FGeometry ViewportGeometry = UWidgetLayoutLibrary::GetViewportWidgetGeometry(
-		const_cast<UEOB_Widget_HeldItemIcon*>(this));
-	OutViewportPos = ViewportGeometry.AbsoluteToLocal(FSlateApplication::Get().GetCursorPos());
-	return true;
+	if (!FSlateApplication::IsInitialized()) return;
+
+	APlayerController* PC = GetOwningPlayer();
+	if (!PC) return;
+
+	float MouseX = 0.f, MouseY = 0.f;
+	if (PC->GetMousePosition(MouseX, MouseY))
+	{
+		CursorSpaceOffset = FVector2D(MouseX, MouseY) - FSlateApplication::Get().GetCursorPos();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[手持] 校准时取 PC 鼠标坐标失败，差值按 (0,0) 处理"));
+	}
 }
 
 void UEOB_Widget_HeldItemIcon::SyncPositionToCursor()
 {
-	FVector2D ViewportPos;
-	if (GetLiveMousePositionOnViewport(ViewportPos))
-	{
-		SetPositionInViewport(ViewportPos);
-	}
+	if (!FSlateApplication::IsInitialized()) return;
+
+	// 实时光标（桌面坐标）+ 校准差值 = SetPositionInViewport 期望的坐标
+	const FVector2D LiveCursor = FSlateApplication::Get().GetCursorPos();
+	SetPositionInViewport(LiveCursor + CursorSpaceOffset);
 }
