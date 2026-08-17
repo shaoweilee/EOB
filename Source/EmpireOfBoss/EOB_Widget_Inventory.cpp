@@ -92,9 +92,12 @@ void UEOB_Widget_Inventory::NativeConstruct()
 
 	// ── 手持物品图标：优先用蓝图子类 WBP_HeldItemIcon（在类默认值 HeldIconWidgetClass 里指定），
 	//    留空则退化为纯 C++ 类（NativeConstruct 自建 SizeBox+Image） ──
-	const TSubclassOf<UEOB_Widget_HeldItemIcon> IconClass = HeldIconWidgetClass
-		                                                        ? HeldIconWidgetClass
-		                                                        : UEOB_Widget_HeldItemIcon::StaticClass();
+	TSubclassOf<UEOB_Widget_HeldItemIcon> IconClass = HeldIconWidgetClass;
+	if (!IconClass)
+	{
+		IconClass = UEOB_Widget_HeldItemIcon::StaticClass();
+	}
+
 	HeldIcon = CreateWidget<UEOB_Widget_HeldItemIcon>(GetOwningPlayer(), IconClass);
 	if (HeldIcon)
 	{
@@ -260,31 +263,31 @@ void UEOB_Widget_Inventory::RefreshUI_Implementation()
 
 // ===================== 抓取 / 拖拽 =====================
 
-void UEOB_Widget_Inventory::NotifySlotLeftPressed(UEOB_Widget_InventorySlot* Slot, const FVector2D& ScreenPos)
+void UEOB_Widget_Inventory::NotifySlotLeftPressed(UEOB_Widget_InventorySlot* InSlot, const FVector2D& ScreenPos)
 {
-	PotentialDragSlot = Slot;
+	PotentialDragSlot = InSlot;
 	PotentialDragPos = ScreenPos;
 	UE_LOG(LogTemp, Log, TEXT("[手持] 登记拖拽起点：模式=%d，页=%d，格=%d"),
-	       static_cast<int32>(Slot->GetMode()), Slot->GetTabIndex(), Slot->GetSlotInTab());
+	       static_cast<int32>(InSlot->GetMode()), InSlot->GetTabIndex(), InSlot->GetSlotInTab());
 }
 
-void UEOB_Widget_Inventory::OnSlotGrabClicked(UEOB_Widget_InventorySlot* Slot)
+void UEOB_Widget_Inventory::OnSlotGrabClicked(UEOB_Widget_InventorySlot* InSlot)
 {
 	// 拖拽中松开会触发起点按钮的 OnClicked（UMG 按钮默认 DownAndUp，松手即触发），
 	// 这次"点击"必须忽略——拖拽的落点由 Tick 里的 ResolveDropAtScreenPosition 结算。
 	if (bDragging) return;
 
 	UE_LOG(LogTemp, Log, TEXT("[手持] 原地点击：模式=%d，页=%d，格=%d，当前%s"),
-	       static_cast<int32>(Slot->GetMode()), Slot->GetTabIndex(), Slot->GetSlotInTab(),
+	       static_cast<int32>(InSlot->GetMode()), InSlot->GetTabIndex(), InSlot->GetSlotInTab(),
 	       IsHoldingItem() ? TEXT("手上有东西→放下") : TEXT("手上空→拿起"));
 
 	if (IsHoldingItem())
 	{
-		PlaceHeldOnSlot(Slot);
+		PlaceHeldOnSlot(InSlot);
 	}
 	else
 	{
-		TryPickUpFromSlot(Slot);
+		TryPickUpFromSlot(InSlot);
 	}
 }
 
@@ -293,28 +296,28 @@ void UEOB_Widget_Inventory::CancelHeldItem()
 	ClearHeldItem(true);
 }
 
-void UEOB_Widget_Inventory::TryPickUpFromSlot(UEOB_Widget_InventorySlot* Slot)
+void UEOB_Widget_Inventory::TryPickUpFromSlot(UEOB_Widget_InventorySlot* InSlot)
 {
-	if (!RefInventory || !Slot || IsHoldingItem()) return;
+	if (!RefInventory || !InSlot || IsHoldingItem()) return;
 
 	FEOBItemInstance Item;
 	EEOBHeldSourceType SourceType = EEOBHeldSourceType::None;
 
-	if (Slot->GetMode() == EEOBSlotWidgetMode::Inventory)
+	if (InSlot->GetMode() == EEOBSlotWidgetMode::Inventory)
 	{
-		if (RefInventory->GetItemAt(Slot->GetTabIndex(), Slot->GetSlotInTab(), Item) && Item.IsValid())
+		if (RefInventory->GetItemAt(InSlot->GetTabIndex(), InSlot->GetSlotInTab(), Item) && Item.IsValid())
 		{
 			SourceType = EEOBHeldSourceType::InventorySlot;
-			HeldTab = Slot->GetTabIndex();
-			HeldSlot = Slot->GetSlotInTab();
+			HeldTab = InSlot->GetTabIndex();
+			HeldSlot = InSlot->GetSlotInTab();
 		}
 	}
-	else if (Slot->GetMode() == EEOBSlotWidgetMode::BagSlot)
+	else if (InSlot->GetMode() == EEOBSlotWidgetMode::BagSlot)
 	{
-		if (RefInventory->GetTabBag(Slot->GetTabIndex(), Item) && Item.IsValid())
+		if (RefInventory->GetTabBag(InSlot->GetTabIndex(), Item) && Item.IsValid())
 		{
 			SourceType = EEOBHeldSourceType::BagSlot;
-			HeldTab = Slot->GetTabIndex();
+			HeldTab = InSlot->GetTabIndex();
 			HeldSlot = INDEX_NONE;
 		}
 	}
@@ -327,8 +330,8 @@ void UEOB_Widget_Inventory::TryPickUpFromSlot(UEOB_Widget_InventorySlot* Slot)
 
 	// 注意：东西仍在原格（数据不动），只是源格显示为空 + 图标跟手。
 	HeldSource = SourceType;
-	HeldGhostSlot = Slot;
-	Slot->UpdateSlot(FEOBItemInstance());
+	HeldGhostSlot = InSlot;
+	InSlot->UpdateSlot(FEOBItemInstance());
 	BeginHeldIcon(Item.Definition->Icon);
 
 	UE_LOG(LogTemp, Log, TEXT("[手持] 已拿起【%s】（来源=%s）"),
@@ -444,12 +447,12 @@ void UEOB_Widget_Inventory::ResolveDropAtScreenPosition(const FVector2D& ScreenP
 
 UEOB_Widget_InventorySlot* UEOB_Widget_Inventory::FindSlotAtScreenPosition(const FVector2D& ScreenPos) const
 {
-	auto IsSlotUnderCursor = [&ScreenPos](UEOB_Widget_InventorySlot* Slot) -> bool
+	auto IsSlotUnderCursor = [&ScreenPos](UEOB_Widget_InventorySlot* SlotCandidate) -> bool
 	{
-		if (!Slot) return false;
-		const ESlateVisibility Vis = Slot->GetVisibility();
+		if (!SlotCandidate) return false;
+		const ESlateVisibility Vis = SlotCandidate->GetVisibility();
 		if (Vis == ESlateVisibility::Collapsed || Vis == ESlateVisibility::Hidden) return false;
-		return Slot->GetCachedGeometry().IsUnderLocation(ScreenPos);
+		return SlotCandidate->GetCachedGeometry().IsUnderLocation(ScreenPos);
 	};
 
 	auto FindInTabs = [&IsSlotUnderCursor](UVerticalBox* Box) -> UEOB_Widget_InventorySlot*
@@ -473,9 +476,9 @@ UEOB_Widget_InventorySlot* UEOB_Widget_Inventory::FindSlotAtScreenPosition(const
 	{
 		for (UWidget* Child : GridPanel_Items->GetAllChildren())
 		{
-			if (UEOB_Widget_InventorySlot* Slot = Cast<UEOB_Widget_InventorySlot>(Child))
+			if (UEOB_Widget_InventorySlot* SlotWidget = Cast<UEOB_Widget_InventorySlot>(Child))
 			{
-				if (IsSlotUnderCursor(Slot)) return Slot;
+				if (IsSlotUnderCursor(SlotWidget)) return SlotWidget;
 			}
 		}
 	}

@@ -40,6 +40,9 @@ public:
 	/** 切换到某个背包页（未激活的页不可切换） */
 	void SetCurrentTab(int32 NewTab);
 
+	/** 当前显示的背包页下标（页签控件用来判断自己是不是当前页） */
+	int32 GetCurrentTab() const { return CurrentTabIndex; }
+
 	/** 关闭所有页签下拉框（可豁免一个——刚打开的那个） */
 	void CloseAllTabDropdowns(int32 ExceptTabIndex = INDEX_NONE);
 
@@ -50,10 +53,10 @@ public:
 	bool IsHoldingItem() const { return HeldSource != EEOBHeldSourceType::None; }
 
 	/** 格子控件回调：左键按下的瞬间（登记拖拽起点） */
-	void NotifySlotLeftPressed(UEOB_Widget_InventorySlot* Slot, const FVector2D& ScreenPos);
+	void NotifySlotLeftPressed(UEOB_Widget_InventorySlot* InSlot, const FVector2D& ScreenPos);
 
 	/** 格子控件回调：原地点击（松手时位移未超阈值）= 抓取手势的"拿起/放下" */
-	void OnSlotGrabClicked(UEOB_Widget_InventorySlot* Slot);
+	void OnSlotGrabClicked(UEOB_Widget_InventorySlot* InSlot);
 
 	/** 取消拿起：手上的东西回源格（数据从未离开过，只需恢复源格显示 + 收图标） */
 	void CancelHeldItem();
@@ -147,7 +150,7 @@ private:
 	TObjectPtr<UEOB_Widget_HeldItemIcon> HeldIcon;
 
 	/** 尝试从指定格子拿起物品（成功则源格变空 + 图标跟手；数据仍在原格） */
-	void TryPickUpFromSlot(UEOB_Widget_InventorySlot* Slot);
+	void TryPickUpFromSlot(UEOB_Widget_InventorySlot* InSlot);
 
 	/** 把手上的东西放到目标格子（交换/装备包裹/互换页签等，按来源与目标类型分发） */
 	void PlaceHeldOnSlot(UEOB_Widget_InventorySlot* TargetSlot);
