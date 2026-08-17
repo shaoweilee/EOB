@@ -84,7 +84,7 @@ protected:
 
 	/** 背包格子边长（像素） */
 	UPROPERTY(EditAnywhere, Category = "EOB|Inventory")
-	float InventorySlotSize = 67.f;
+	float InventorySlotSize = 110.f;
 
 	/** 拖拽阈值（像素）：按下后位移超过它才算拖拽，否则视为抓取手势的原地点击 */
 	UPROPERTY(EditAnywhere, Category = "EOB|Inventory")
