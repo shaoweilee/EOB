@@ -21,12 +21,15 @@ class USizeBox;
  * 由背包面板（EOB_Widget_Inventory）运行时创建并加到视口最高层。
  *
  * 跟随原理（编辑器内嵌视口 / 独立窗口 / 任意 DPI、任意缩放叠加都自适应）：
- *  - FSlateApplication::GetCursorPos() 拿实时光标（桌面坐标，拖拽中被捕获也不冻结）；
- *  - 用视口控件几何体 AbsoluteToLocal() 一次性换算成 SetPositionInViewport 的空间，
- *    Windows 缩放 × 编辑器应用程序缩放 × 视口 UI 缩放全部包含在该几何变换里；
- *  - 左键松开时，PC->GetMousePosition 是实时真值，用它定位并把
- *    "真值 - 换算值"记为常数偏移；左键按住时用"换算值 + 常数偏移"，
- *    即使换算存在固定原点差也能自动补平。
+ *  - 左键松开（抓取、无捕获）：PC->GetMousePosition 是实时真值，直接定位，零误差；
+ *  - 左键按住（拖拽、被按钮捕获，PC 坐标冻结）：用【自身几何体】把
+ *    FSlateApplication 的实时光标（桌面坐标，不冻结）换算成图标本地坐标，
+ *    与图标中心 (IconSize/2) 的差值就是本帧该补的位移：
+ *        新位置 = 旧位置 + (光标本地坐标 - 中心)
+ *    每帧代数精确收敛到光标，几何体即使滞后一帧也会被修正量自动抵消，
+ *    不需要锚点 / 比例 / 校准偏移，也没有任何累积误差。
+ *    （面板的红框高亮在拖拽中同样依赖"控件几何体 ↔ GetCursorPos"的换算且一直正确，
+ *      证明这条换算在内嵌 PIE 里可靠；不可靠的只有 GetViewportWidgetGeometry。）
  */
 UCLASS()
 class EMPIREOFBOSS_API UEOB_Widget_HeldItemIcon : public UUserWidget
@@ -56,12 +59,15 @@ private:
 	/** 图标边长（像素），ShowIcon 时更新 */
 	float IconSize = 64.f;
 
+	/** 上一次设置的位置（拖拽路径里用"旧位置 + 修正量"推算新位置） */
+	FVector2D LastSetPos = FVector2D::ZeroVector;
+
 	/** 诊断用：Tick 里只打一次日志 */
 	bool bLoggedFirstTick = false;
 
-	/** 常数偏移：松键时用 PC 真值校准（PC真值 - 几何换算值），按键时补到换算值上 */
-	FVector2D ConvertOffset = FVector2D::ZeroVector;
+	/** 诊断用：每次 ShowIcon 后，拖拽路径只打一次修正量日志 */
+	bool bLoggedDragSync = false;
 
-	/** 每帧定位：几何换算 + 松键真值校准 */
+	/** 每帧定位：松键用 PC 真值；按键用自身几何体修正 */
 	void SyncPositionToCursor();
 };
