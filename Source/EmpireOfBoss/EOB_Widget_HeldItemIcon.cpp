@@ -58,14 +58,15 @@ void UEOB_Widget_HeldItemIcon::ShowIcon(UTexture2D* Icon, float InSize)
 
 	SetVisibility(ESlateVisibility::HitTestInvisible); // 显示但不挡任何点击
 
-	// 校准两套坐标系的差值，然后立刻把图标摆到鼠标当前位置（不用等下一帧 Tick）
-	CalibrateCursorSpaceOffset();
+	// 记录锚点，然后立刻把图标摆到鼠标当前位置（不用等下一帧 Tick）
+	CaptureAnchor();
 	SyncPositionToCursor();
 
-	UE_LOG(LogTemp, Log, TEXT("[手持] ShowIcon：贴图=%s，边长=%.0f，坐标差值=(%.0f, %.0f)"),
+	UE_LOG(LogTemp, Log, TEXT("[手持] ShowIcon：贴图=%s，边长=%.0f，锚点=%s (%.0f, %.0f)"),
 	       Icon ? TEXT("有效") : TEXT("空！"),
 	       IconSize,
-	       CursorSpaceOffset.X, CursorSpaceOffset.Y);
+	       bAnchorValid ? TEXT("有效") : TEXT("无效"),
+	       AnchorViewportPos.X, AnchorViewportPos.Y);
 }
 
 void UEOB_Widget_HeldItemIcon::HideIcon()
@@ -91,12 +92,9 @@ void UEOB_Widget_HeldItemIcon::NativeTick(const FGeometry& MyGeometry, float InD
 	}
 }
 
-void UEOB_Widget_HeldItemIcon::CalibrateCursorSpaceOffset()
+void UEOB_Widget_HeldItemIcon::CaptureAnchor()
 {
-	// PC->GetMousePosition 的坐标空间与 SetPositionInViewport 完全对齐（抓取模式已验证对准），
-	// 但左键按住被按钮捕获时它会冻结；FSlateApplication::GetCursorPos 永远实时但坐标系不同。
-	// 两者的差是固定值（窗口原点等因素），在这里一次性校准，之后每帧用实时光标 + 差值即可。
-	CursorSpaceOffset = FVector2D::ZeroVector;
+	bAnchorValid = false;
 
 	if (!FSlateApplication::IsInitialized()) return;
 
@@ -104,21 +102,60 @@ void UEOB_Widget_HeldItemIcon::CalibrateCursorSpaceOffset()
 	if (!PC) return;
 
 	float MouseX = 0.f, MouseY = 0.f;
-	if (PC->GetMousePosition(MouseX, MouseY))
+	if (!PC->GetMousePosition(MouseX, MouseY))
 	{
-		CursorSpaceOffset = FVector2D(MouseX, MouseY) - FSlateApplication::Get().GetCursorPos();
+		UE_LOG(LogTemp, Warning, TEXT("[手持] 记录锚点时取 PC 鼠标坐标失败"));
+		return;
 	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[手持] 校准时取 PC 鼠标坐标失败，差值按 (0,0) 处理"));
-	}
+
+	AnchorViewportPos = FVector2D(MouseX, MouseY);
+	AnchorDesktopPos = FSlateApplication::Get().GetCursorPos();
+	bAnchorValid = true;
 }
 
 void UEOB_Widget_HeldItemIcon::SyncPositionToCursor()
 {
 	if (!FSlateApplication::IsInitialized()) return;
 
-	// 实时光标（桌面坐标）+ 校准差值 = SetPositionInViewport 期望的坐标
-	const FVector2D LiveCursor = FSlateApplication::Get().GetCursorPos();
-	SetPositionInViewport(LiveCursor + CursorSpaceOffset);
+	const FVector2D LiveDesktop = FSlateApplication::Get().GetCursorPos();
+	const bool bLeftDown = FSlateApplication::Get().GetPressedMouseButtons().Contains(EKeys::LeftMouseButton);
+
+	// ── 左键松开（抓取状态、无捕获）：PC 坐标是实时真值，直接用，并顺手刷新锚点 ──
+	// 这样锚点在抓取期间每帧都是新的；即使随后按住左键开始拖拽，推算的起点也是零误差的。
+	if (!bLeftDown)
+	{
+		if (APlayerController* PC = GetOwningPlayer())
+		{
+			float MouseX = 0.f, MouseY = 0.f;
+			if (PC->GetMousePosition(MouseX, MouseY))
+			{
+				AnchorViewportPos = FVector2D(MouseX, MouseY);
+				AnchorDesktopPos = LiveDesktop;
+				bAnchorValid = true;
+
+				SetPositionInViewport(AnchorViewportPos);
+				return;
+			}
+		}
+	}
+
+	// ── 左键按住（拖拽中、被按钮捕获）：PC 坐标冻结，用锚点 + 实时位移推算 ──
+	// 缩放取"本控件几何的绝对缩放"——它等于内嵌视口拉伸比 × 界面缩放，
+	// 随视口拖大拖小实时变化，永远匹配（不能用 GetViewportScale，那取的是别的东西）。
+	if (bAnchorValid)
+	{
+		float LiveScale = GetCachedGeometry().GetAccumulatedLayoutTransform().GetScale();
+		if (LiveScale < KINDA_SMALL_NUMBER)
+		{
+			LiveScale = 1.f;
+		}
+
+		const FVector2D ViewportPos = AnchorViewportPos + (LiveDesktop - AnchorDesktopPos) / LiveScale;
+		SetPositionInViewport(ViewportPos);
+	}
+	else
+	{
+		// 兜底：从没拿到过锚点（理论上不会发生），直写桌面坐标，至少跟随是实时的
+		SetPositionInViewport(LiveDesktop);
+	}
 }

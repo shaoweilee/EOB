@@ -286,6 +286,7 @@ void UEOB_Widget_Inventory::OnSlotGrabClicked(UEOB_Widget_InventorySlot* InSlot)
 
 	if (IsHoldingItem())
 	{
+		// 方案一：抓取手势点到非法格子（红框）时保持手持，主人可换目标或右键取消
 		PlaceHeldOnSlot(InSlot);
 	}
 	else
@@ -342,9 +343,9 @@ void UEOB_Widget_Inventory::TryPickUpFromSlot(UEOB_Widget_InventorySlot* InSlot)
 	       SourceType == EEOBHeldSourceType::BagSlot ? TEXT("包裹栏位") : TEXT("背包格"));
 }
 
-void UEOB_Widget_Inventory::PlaceHeldOnSlot(UEOB_Widget_InventorySlot* TargetSlot)
+bool UEOB_Widget_Inventory::PlaceHeldOnSlot(UEOB_Widget_InventorySlot* TargetSlot)
 {
-	if (!RefInventory || !TargetSlot || !IsHoldingItem()) return;
+	if (!RefInventory || !TargetSlot || !IsHoldingItem()) return false;
 
 	const EEOBSlotWidgetMode TargetMode = TargetSlot->GetMode();
 	const int32 TargetTab = TargetSlot->GetTabIndex();
@@ -357,14 +358,15 @@ void UEOB_Widget_Inventory::PlaceHeldOnSlot(UEOB_Widget_InventorySlot* TargetSlo
 		{
 			if (TargetTab == HeldTab && TargetSlotInTab == HeldSlot)
 			{
-				ClearHeldItem(true);
-				return;
+				ClearHeldItem(true); // 点回源格 = 原路放回
+				return true;
 			}
 			if (RefInventory->MoveOrSwapItem(HeldTab, HeldSlot, TargetTab, TargetSlotInTab))
 			{
 				ClearHeldItem(false);
+				return true;
 			}
-			return;
+			return false;
 		}
 
 		if (TargetMode == EEOBSlotWidgetMode::BagSlot)
@@ -376,16 +378,17 @@ void UEOB_Widget_Inventory::PlaceHeldOnSlot(UEOB_Widget_InventorySlot* TargetSlo
 				if (RefInventory->EquipBagFromSlotToTab(HeldTab, HeldSlot, TargetTab))
 				{
 					ClearHeldItem(false);
+					return true;
 				}
 			}
 			else
 			{
 				UE_LOG(LogTemp, Log, TEXT("[背包 UI] 包裹栏位只能放背包物品。"));
 			}
-			return;
+			return false;
 		}
 
-		return;
+		return false;
 	}
 
 	// ── 来源：包裹栏位 ──
@@ -395,14 +398,15 @@ void UEOB_Widget_Inventory::PlaceHeldOnSlot(UEOB_Widget_InventorySlot* TargetSlo
 		{
 			if (TargetTab == HeldTab)
 			{
-				ClearHeldItem(true);
-				return;
+				ClearHeldItem(true); // 点回源栏位 = 原路放回
+				return true;
 			}
 			if (RefInventory->SwapTabs(HeldTab, TargetTab))
 			{
 				ClearHeldItem(false);
+				return true;
 			}
-			return;
+			return false;
 		}
 
 		if (TargetMode == EEOBSlotWidgetMode::Inventory)
@@ -412,15 +416,18 @@ void UEOB_Widget_Inventory::PlaceHeldOnSlot(UEOB_Widget_InventorySlot* TargetSlo
 			if (TargetTab == HeldTab)
 			{
 				UE_LOG(LogTemp, Log, TEXT("[背包 UI] 不能把包裹放进它自己那一页。"));
-				return; // 保持手持，主人可以换页再放，或右键取消
+				return false;
 			}
 			if (RefInventory->UnequipBagToSlot(HeldTab, TargetTab, TargetSlotInTab))
 			{
 				ClearHeldItem(false);
+				return true;
 			}
-			return;
+			return false;
 		}
 	}
+
+	return false;
 }
 
 void UEOB_Widget_Inventory::ResolveDropAtScreenPosition(const FVector2D& ScreenPos)
@@ -429,7 +436,11 @@ void UEOB_Widget_Inventory::ResolveDropAtScreenPosition(const FVector2D& ScreenP
 
 	if (UEOB_Widget_InventorySlot* TargetSlot = FindSlotAtScreenPosition(ScreenPos))
 	{
-		PlaceHeldOnSlot(TargetSlot);
+		// 拖拽松手：落点合法就放下；落点是非法格子（红框）就取消手持、东西回原位
+		if (!PlaceHeldOnSlot(TargetSlot))
+		{
+			ClearHeldItem(true);
+		}
 		return;
 	}
 
