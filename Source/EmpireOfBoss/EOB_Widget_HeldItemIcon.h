@@ -20,13 +20,13 @@ class USizeBox;
  * 自己 Tick 跟随鼠标（图标中心对准光标）；HitTestInvisible，绝不挡点击。
  * 由背包面板（EOB_Widget_Inventory）运行时创建并加到视口最高层。
  *
- * 跟随坐标的门道（编辑器内嵌视口 / 独立窗口 / 任意 DPI 缩放都适配）：
- *  - 左键松开时：PC->GetMousePosition 是实时真值（与 SetPositionInViewport 同空间），
- *    直接用它，并顺手把锚点刷新成最新；
- *  - 左键按住时（拖拽）：PC 坐标被按钮捕获冻结，改用
- *    "锚点 + (Slate 实时光标 - 锚点光标) / 图标自身几何缩放" 推算——
- *    几何缩放取自本控件 GetCachedGeometry().GetAbsoluteScale()，
- *    随内嵌视口拉伸实时变化，永远匹配。
+ * 跟随原理（编辑器内嵌视口 / 独立窗口 / 任意 DPI、任意缩放叠加都自适应）：
+ *  - FSlateApplication::GetCursorPos() 拿实时光标（桌面坐标，拖拽中被捕获也不冻结）；
+ *  - 用视口控件几何体 AbsoluteToLocal() 一次性换算成 SetPositionInViewport 的空间，
+ *    Windows 缩放 × 编辑器应用程序缩放 × 视口 UI 缩放全部包含在该几何变换里；
+ *  - 左键松开时，PC->GetMousePosition 是实时真值，用它定位并把
+ *    "真值 - 换算值"记为常数偏移；左键按住时用"换算值 + 常数偏移"，
+ *    即使换算存在固定原点差也能自动补平。
  */
 UCLASS()
 class EMPIREOFBOSS_API UEOB_Widget_HeldItemIcon : public UUserWidget
@@ -59,18 +59,9 @@ private:
 	/** 诊断用：Tick 里只打一次日志 */
 	bool bLoggedFirstTick = false;
 
-	/** 锚点：PC 坐标系下的鼠标位置（SetPositionInViewport 期望的空间） */
-	FVector2D AnchorViewportPos = FVector2D::ZeroVector;
+	/** 常数偏移：松键时用 PC 真值校准（PC真值 - 几何换算值），按键时补到换算值上 */
+	FVector2D ConvertOffset = FVector2D::ZeroVector;
 
-	/** 锚点：同一时刻的 Slate 实时光标位置（桌面坐标） */
-	FVector2D AnchorDesktopPos = FVector2D::ZeroVector;
-
-	/** 锚点是否有效（拿到过 PC 坐标即为 true） */
-	bool bAnchorValid = false;
-
-	/** 记录锚点（拿起那一刻调用；拖拽中 PC 坐标冻结在按下位置，误差 ≤ 拖拽阈值，可接受） */
-	void CaptureAnchor();
-
-	/** 把图标摆到鼠标当前位置（松键用真值，按禁用锚点推算） */
+	/** 每帧定位：几何换算 + 松键真值校准 */
 	void SyncPositionToCursor();
 };

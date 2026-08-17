@@ -2,6 +2,7 @@
 #include "Components/Image.h"
 #include "Components/SizeBox.h"
 #include "Blueprint/WidgetTree.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
 #include "Framework/Application/SlateApplication.h"
 #include "GameFramework/PlayerController.h"
 
@@ -58,15 +59,13 @@ void UEOB_Widget_HeldItemIcon::ShowIcon(UTexture2D* Icon, float InSize)
 
 	SetVisibility(ESlateVisibility::HitTestInvisible); // 显示但不挡任何点击
 
-	// 记录锚点，然后立刻把图标摆到鼠标当前位置（不用等下一帧 Tick）
-	CaptureAnchor();
+	// 立刻把图标摆到鼠标当前位置（不用等下一帧 Tick）
 	SyncPositionToCursor();
 
-	UE_LOG(LogTemp, Log, TEXT("[手持] ShowIcon：贴图=%s，边长=%.0f，锚点=%s (%.0f, %.0f)"),
+	UE_LOG(LogTemp, Log, TEXT("[手持] ShowIcon：贴图=%s，边长=%.0f，常数偏移=(%.1f, %.1f)"),
 	       Icon ? TEXT("有效") : TEXT("空！"),
 	       IconSize,
-	       bAnchorValid ? TEXT("有效") : TEXT("无效"),
-	       AnchorViewportPos.X, AnchorViewportPos.Y);
+	       ConvertOffset.X, ConvertOffset.Y);
 }
 
 void UEOB_Widget_HeldItemIcon::HideIcon()
@@ -79,10 +78,10 @@ void UEOB_Widget_HeldItemIcon::NativeTick(const FGeometry& MyGeometry, float InD
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	if (GetVisibility() == ESlateVisibility::Collapsed) return;
-
-	// 跟随鼠标（配合 SetAlignmentInViewport(0.5,0.5)，图标中心 = 光标位置）
+	// 即使图标隐藏（Collapsed）也持续运行：松键时持续校准常数偏移，拿起那一刻就是准的。
 	SyncPositionToCursor();
+
+	if (GetVisibility() == ESlateVisibility::Collapsed) return;
 
 	// 只打第一帧，确认 Tick 在跑
 	if (!bLoggedFirstTick)
@@ -92,36 +91,22 @@ void UEOB_Widget_HeldItemIcon::NativeTick(const FGeometry& MyGeometry, float InD
 	}
 }
 
-void UEOB_Widget_HeldItemIcon::CaptureAnchor()
-{
-	bAnchorValid = false;
-
-	if (!FSlateApplication::IsInitialized()) return;
-
-	APlayerController* PC = GetOwningPlayer();
-	if (!PC) return;
-
-	float MouseX = 0.f, MouseY = 0.f;
-	if (!PC->GetMousePosition(MouseX, MouseY))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[手持] 记录锚点时取 PC 鼠标坐标失败"));
-		return;
-	}
-
-	AnchorViewportPos = FVector2D(MouseX, MouseY);
-	AnchorDesktopPos = FSlateApplication::Get().GetCursorPos();
-	bAnchorValid = true;
-}
-
 void UEOB_Widget_HeldItemIcon::SyncPositionToCursor()
 {
 	if (!FSlateApplication::IsInitialized()) return;
 
+	// 实时光标（桌面坐标）——拖拽中被按钮捕获也不会冻结
 	const FVector2D LiveDesktop = FSlateApplication::Get().GetCursorPos();
+
+	// 视口控件几何体：AbsoluteToLocal 一次性完成 桌面坐标 → SetPositionInViewport 空间 的换算。
+	// Windows 显示缩放、编辑器应用程序缩放、内嵌视口 UI 缩放全部包含在这个几何变换里。
+	const FGeometry ViewportGeo = UWidgetLayoutLibrary::GetViewportWidgetGeometry(this);
+	const FVector2D Converted = ViewportGeo.AbsoluteToLocal(LiveDesktop);
+
 	const bool bLeftDown = FSlateApplication::Get().GetPressedMouseButtons().Contains(EKeys::LeftMouseButton);
 
-	// ── 左键松开（抓取状态、无捕获）：PC 坐标是实时真值，直接用，并顺手刷新锚点 ──
-	// 这样锚点在抓取期间每帧都是新的；即使随后按住左键开始拖拽，推算的起点也是零误差的。
+	// ── 左键松开（抓取状态、无捕获）：PC 坐标是实时真值 ──
+	// 直接用真值定位（零误差），并校准常数偏移（真值 - 换算值）。
 	if (!bLeftDown)
 	{
 		if (APlayerController* PC = GetOwningPlayer())
@@ -129,33 +114,14 @@ void UEOB_Widget_HeldItemIcon::SyncPositionToCursor()
 			float MouseX = 0.f, MouseY = 0.f;
 			if (PC->GetMousePosition(MouseX, MouseY))
 			{
-				AnchorViewportPos = FVector2D(MouseX, MouseY);
-				AnchorDesktopPos = LiveDesktop;
-				bAnchorValid = true;
-
-				SetPositionInViewport(AnchorViewportPos);
+				const FVector2D Truth(MouseX, MouseY);
+				ConvertOffset = Truth - Converted;
+				SetPositionInViewport(Truth);
 				return;
 			}
 		}
 	}
 
-	// ── 左键按住（拖拽中、被按钮捕获）：PC 坐标冻结，用锚点 + 实时位移推算 ──
-	// 缩放取"本控件几何的绝对缩放"——它等于内嵌视口拉伸比 × 界面缩放，
-	// 随视口拖大拖小实时变化，永远匹配（不能用 GetViewportScale，那取的是别的东西）。
-	if (bAnchorValid)
-	{
-		float LiveScale = GetCachedGeometry().GetAccumulatedLayoutTransform().GetScale();
-		if (LiveScale < KINDA_SMALL_NUMBER)
-		{
-			LiveScale = 1.f;
-		}
-
-		const FVector2D ViewportPos = AnchorViewportPos + (LiveDesktop - AnchorDesktopPos) / LiveScale;
-		SetPositionInViewport(ViewportPos);
-	}
-	else
-	{
-		// 兜底：从没拿到过锚点（理论上不会发生），直写桌面坐标，至少跟随是实时的
-		SetPositionInViewport(LiveDesktop);
-	}
+	// ── 左键按住（拖拽中、被捕获）：PC 坐标冻结，用换算值 + 校准过的常数偏移 ──
+	SetPositionInViewport(Converted + ConvertOffset);
 }
