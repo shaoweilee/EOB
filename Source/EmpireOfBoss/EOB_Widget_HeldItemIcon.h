@@ -5,10 +5,18 @@
 #include "EOB_Widget_HeldItemIcon.generated.h"
 
 class UImage;
+class USizeBox;
 
 /**
  * 抓取/拖拽时"跟手"的手持物品图标。
- * 纯 C++ 控件：NativeConstruct 里自建一个 UImage 根控件，无需任何蓝图素材。
+ *
+ * 推荐用法：建一个蓝图子类 WBP_HeldItemIcon（父类选本类），设计器里摆
+ * [SizeBox_Root（宽高重载各 64）→ Image_Icon] 两层即可，然后在 WBP_Inventory
+ * 的类默认值里把 HeldIconWidgetClass 指到 WBP_HeldItemIcon。
+ *
+ * 纯 C++ 兜底：若直接用 C++ 类创建（Image_Icon 没绑定），NativeConstruct 会自建
+ * [SizeBox → Image] 结构，功能相同。
+ *
  * 自己 Tick 跟随鼠标（图标中心对准光标）；HitTestInvisible，绝不挡点击。
  * 由背包面板（EOB_Widget_Inventory）运行时创建并加到视口最高层。
  */
@@ -28,11 +36,18 @@ protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
-private:
-	/** 根图像控件（NativeConstruct 里自建） */
-	UPROPERTY()
+	/** 根尺寸框（WBP 里按这个名字摆 SizeBox；纯 C++ 时自建） */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USizeBox> SizeBox_Root;
+
+	/** 图标图像（WBP 里按这个名字摆 Image，作为 SizeBox_Root 的子控件；纯 C++ 时自建） */
+	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UImage> Image_Icon;
 
+private:
 	/** 图标边长（像素），ShowIcon 时更新 */
 	float IconSize = 64.f;
+
+	/** 诊断用：Tick 里只打一次日志 */
+	bool bLoggedFirstTick = false;
 };

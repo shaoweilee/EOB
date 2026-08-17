@@ -4,28 +4,32 @@
 #include "Blueprint/UserWidget.h"
 #include "EOB_Widget_Inventory.generated.h"
 
+class UEOB_InventoryComponent;
 class UUniformGridPanel;
 class UVerticalBox;
-class UTexture2D;
-class UEOB_InventoryComponent;
 class UEOB_Widget_InventorySlot;
 class UEOB_Widget_InventoryTab;
 class UEOB_Widget_HeldItemIcon;
+class UTexture2D;
+
+/** 手持物品的来源类型 */
+enum class EEOBHeldSourceType : uint8
+{
+	None, // 空手
+	InventorySlot, // 背包格
+	BagSlot // 包裹栏位（拿的是整个包）
+};
 
 /**
- * 背包面板：左右两列页签（各 6 个）+ 当前页格子（格子数 = 该页背包容量）。
- * 蓝图子类需要三个同名容器：
- *  - VerticalBox_TabsLeft：左侧页签栏（第 1~6 页，从上到下）
- *  - VerticalBox_TabsRight：右侧页签栏（第 7~12 页，从上到下）
- *  - GridPanel_Items：物品格子容器
- * 左右页签各用一个皮肤类（TabWidgetClassLeft / TabWidgetClassRight），
- * 两个皮肤的父类都是 EOB_Widget_InventoryTab，只是 UMG 布局镜像。
+ * 背包主面板：
+ * - GridPanel_Items 显示当前背包页的物品
+ * - 左右两列页签（VerticalBox_TabsLeft / VerticalBox_TabsRight），共 12 个
+ * - 抓取（原地点击）/ 拖拽（按住移动超阈值）/ 拖出面板丢弃，由本类集中处理
+ * - 手持物品通过 HeldIcon 图标跟手显示（HitTestInvisible，不挡点击）
  *
- * 本面板同时是"抓取/拖拽"的手势状态机：
- *  - 抓取：原地点击格子 = 拿起（源格变空、图标跟手）；再点一格 = 放下
- *  - 拖拽：按住移动超过 DragThresholdPixels 像素 = 拖拽，松开 = 落点结算
- *  - 落点在面板外（背包格来源）= 丢到地上；包裹栏位来源拖到空处 = 取消
- *  - 任何时候右键 = 取消手持、放回原处
+ * 抓取：原地点击 = 拿起（东西仍在原格，源格变空 + 图标跟手）；再点目标格 = 放下/交换。
+ * 拖拽：按下移动超过 DragThresholdPixels 后松手 = 对落点结算；落在面板外 = 丢到地上（仅背包格来源）。
+ * 任何时刻右键 = 取消拿起（东西回源格显示，数据从未动过）。
  */
 UCLASS()
 class EMPIREOFBOSS_API UEOB_Widget_Inventory : public UUserWidget
@@ -33,128 +37,130 @@ class EMPIREOFBOSS_API UEOB_Widget_Inventory : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	UFUNCTION()
-	void RefreshUI();
-
-	/** 刷新标签栏（激活状态、偏好名、当前页高亮、包裹栏位） */
-	UFUNCTION()
-	void RefreshTabs();
-
-	/** 切换当前显示的标签页（0~11）；未激活的页拒绝切换 */
-	UFUNCTION(BlueprintCallable, Category = "EOB|UI")
+	/** 切换到某个背包页（未激活的页不可切换） */
 	void SetCurrentTab(int32 NewTab);
 
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "EOB|UI")
-	int32 GetCurrentTab() const { return CurrentTabIndex; }
+	/** 关闭所有页签下拉框（可豁免一个——刚打开的那个） */
+	void CloseAllTabDropdowns(int32 ExceptTabIndex = INDEX_NONE);
 
-	/** 收起所有页签的"偏好"下拉面板（ExceptTabIndex 除外，-1 = 全部收起） */
-	void CloseAllTabDropdowns(int32 ExceptTabIndex = -1);
+	/** 让所有页签按背包组件当前状态刷新显示 */
+	void RefreshTabs();
 
-	// ===================== 抓取 / 拖拽（格子控件调用） =====================
-
-	/** 格子报告"左键按下了"：登记拖拽起点（位移超阈值才算拖拽） */
-	void NotifySlotLeftPressed(UEOB_Widget_InventorySlot* InventorySlot, const FVector2D& ScreenPos);
-
-	/** 格子报告"原地点击了"：手上没东西 = 拿起；手上有东西 = 放下 */
-	void OnSlotGrabClicked(UEOB_Widget_InventorySlot* InventorySlot);
-
-	/** 手上是否拿着物品（拿起后东西仍在原格，只是显示为空、图标跟手） */
+	/** 当前是否有拿在手上的物品 */
 	bool IsHoldingItem() const { return HeldSource != EEOBHeldSourceType::None; }
 
-	/** 取消手持：图标消失、源格恢复显示（东西从头到尾没动过） */
+	/** 格子控件回调：左键按下的瞬间（登记拖拽起点） */
+	void NotifySlotLeftPressed(UEOB_Widget_InventorySlot* Slot, const FVector2D& ScreenPos);
+
+	/** 格子控件回调：原地点击（松手时位移未超阈值）= 抓取手势的"拿起/放下" */
+	void OnSlotGrabClicked(UEOB_Widget_InventorySlot* Slot);
+
+	/** 取消拿起：手上的东西回源格（数据从未离开过，只需恢复源格显示 + 收图标） */
 	void CancelHeldItem();
 
 protected:
-	virtual void NativeConstruct() override;
-	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
-	virtual void NativeDestruct() override;
-
-	/** 物品格子容器 */
-	UPROPERTY(meta = (BindWidget), BlueprintReadOnly, Category = "EOB|UI")
-	TObjectPtr<UUniformGridPanel> GridPanel_Items;
-
-	/** 左侧页签栏容器（第 1~6 页） */
-	UPROPERTY(meta = (BindWidget), BlueprintReadOnly, Category = "EOB|UI")
-	TObjectPtr<UVerticalBox> VerticalBox_TabsLeft;
-
-	/** 右侧页签栏容器（第 7~12 页） */
-	UPROPERTY(meta = (BindWidget), BlueprintReadOnly, Category = "EOB|UI")
-	TObjectPtr<UVerticalBox> VerticalBox_TabsRight;
-
-	/** 格子控件类（蓝图默认值里选 WBP_InventorySlot） */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
-	TSubclassOf<UEOB_Widget_InventorySlot> SlotWidgetClass;
-
-	/** 左侧页签皮肤类（WBP_InventoryTab_Left） */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
+	/** 左侧页签用的控件蓝图（父类应为 EOB_Widget_InventoryTab，例如 WBP_InventoryTab_Left） */
+	UPROPERTY(EditAnywhere, Category = "EOB|Inventory")
 	TSubclassOf<UEOB_Widget_InventoryTab> TabWidgetClassLeft;
 
-	/** 右侧页签皮肤类（WBP_InventoryTab_Right）。不填则 12 个页签都用左侧皮肤 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
+	/** 右侧页签用的控件蓝图（例如 WBP_InventoryTab_Right）；留空则右侧也用左侧的类 */
+	UPROPERTY(EditAnywhere, Category = "EOB|Inventory")
 	TSubclassOf<UEOB_Widget_InventoryTab> TabWidgetClassRight;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
+	/** 物品格子用的控件蓝图（父类应为 EOB_Widget_InventorySlot） */
+	UPROPERTY(EditAnywhere, Category = "EOB|Inventory")
+	TSubclassOf<UEOB_Widget_InventorySlot> SlotWidgetClass;
+
+	/** 手持图标用的控件蓝图（父类应为 EOB_Widget_HeldItemIcon，例如 WBP_HeldItemIcon）；留空则用纯 C++ 兜底 */
+	UPROPERTY(EditAnywhere, Category = "EOB|Inventory")
+	TSubclassOf<UEOB_Widget_HeldItemIcon> HeldIconWidgetClass;
+
+	/** 网格每行多少列（决定 GridPanel_Items 的列数） */
+	UPROPERTY(EditAnywhere, Category = "EOB|Inventory")
 	int32 GridColumns = 8;
 
-	/** 物品栏格子的边长（像素）。只作用于物品栏，装备面板格子不受影响 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
-	float InventorySlotSize = 110.f;
+	/** 背包格子边长（像素） */
+	UPROPERTY(EditAnywhere, Category = "EOB|Inventory")
+	float InventorySlotSize = 67.f;
 
-	/** 拖拽判定阈值（像素）：按住左键位移超过它才算拖拽，否则算"原地点击=抓取" */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
+	/** 拖拽阈值（像素）：按下后位移超过它才算拖拽，否则视为抓取手势的原地点击 */
+	UPROPERTY(EditAnywhere, Category = "EOB|Inventory")
 	float DragThresholdPixels = 8.f;
 
 	/** 手持图标的边长（像素） */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
+	UPROPERTY(EditAnywhere, Category = "EOB|Inventory")
 	float HeldIconSize = 64.f;
 
-	/** 当前显示的标签页（0~11），默认第 1 页 */
-	UPROPERTY(BlueprintReadOnly, Category = "EOB|UI")
+	/** 物品网格容器（WBP 里同名 UniformGridPanel，父级建议是画布槽并勾"大小到内容"） */
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UUniformGridPanel> GridPanel_Items;
+
+	/** 左侧页签容器（WBP 里同名 VerticalBox，装第 1~6 页） */
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UVerticalBox> VerticalBox_TabsLeft;
+
+	/** 右侧页签容器（WBP 里同名 VerticalBox，装第 7~12 页） */
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UVerticalBox> VerticalBox_TabsRight;
+
+	/** 当前显示的背包页下标 */
+	UPROPERTY(BlueprintReadOnly, Category = "EOB|Inventory")
 	int32 CurrentTabIndex = 0;
 
+	/** 蓝图事件：物品或装备变化后调用（WBP 里可重载做额外刷新，如包裹总容量显示） */
+	UFUNCTION(BlueprintNativeEvent, Category = "EOB|Inventory")
+	void RefreshUI();
+	virtual void RefreshUI_Implementation();
+
+	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+
+private:
+	/** 主角的背包组件 */
 	UPROPERTY()
 	TObjectPtr<UEOB_InventoryComponent> RefInventory;
 
-private:
-	/** 手持物品的来源 */
-	enum class EEOBHeldSourceType : uint8
-	{
-		None, // 没拿东西
-		InventorySlot, // 从背包格拿起
-		BagSlot // 从包裹栏位拿起（拿的是装备的背包）
-	};
-
-	/** 从某格拿起（源格显示为空、手持图标出现）。空格/无背包则什么都不发生 */
-	void TryPickUpFromSlot(UEOB_Widget_InventorySlot* InventorySlot);
-
-	/** 把手上的东西放到目标格（按来源 × 目标模式分派到组件的对应函数） */
-	void PlaceHeldOnSlot(UEOB_Widget_InventorySlot* TargetSlot);
-
-	/** 拖拽松开的落点结算：落在格子上 = 放下；落在别处 = 丢地上（仅背包格来源）或取消 */
-	void ResolveDropAtScreenPosition(const FVector2D& ScreenPos);
-
-	/** 找屏幕坐标下的格子（12 个包裹栏位 + 当前页物品格），找不到返回 nullptr */
-	UEOB_Widget_InventorySlot* FindSlotAtScreenPosition(const FVector2D& ScreenPos) const;
-
-	/** 显示手持图标 */
-	void BeginHeldIcon(UTexture2D* Icon);
-
-	/** 清空手持状态；bRestoreSourceVisual = 把源格显示还原（取消/放回原处时用） */
-	void ClearHeldItem(bool bRestoreSourceVisual);
-
+	/** 手持物品的来源类型（None = 空手） */
 	EEOBHeldSourceType HeldSource = EEOBHeldSourceType::None;
+
+	/** 手持来源：背包格时为所在页，包裹栏位时为页签下标 */
 	int32 HeldTab = INDEX_NONE;
+
+	/** 手持来源：背包格的格内下标（包裹栏位来源时恒为 INDEX_NONE） */
 	int32 HeldSlot = INDEX_NONE;
 
-	/** 被拿起后显示为空的源格子（弱引用：刷新重建后会自动失效） */
+	/** 被拿起的源格控件（幽灵格，拿起期间显示为空；取消/放下时恢复或刷新） */
 	TWeakObjectPtr<UEOB_Widget_InventorySlot> HeldGhostSlot;
 
-	/** 拖拽起点登记（按下位置 + 按下的格子） */
+	/** 左键按下瞬间登记的潜在拖拽起点（原地松手=抓取，移动超阈值=拖拽） */
 	TWeakObjectPtr<UEOB_Widget_InventorySlot> PotentialDragSlot;
+
+	/** 左键按下瞬间的屏幕坐标 */
 	FVector2D PotentialDragPos = FVector2D::ZeroVector;
+
+	/** 当前是否处于"拖拽中"（用于区分原地点击的抓取手势） */
 	bool bDragging = false;
 
-	/** 手持图标（运行时创建的纯 C++ 控件，自带跟随鼠标逻辑） */
+	/** 跟手的手持物品图标（NativeConstruct 里创建，视口最高层） */
 	UPROPERTY()
 	TObjectPtr<UEOB_Widget_HeldItemIcon> HeldIcon;
+
+	/** 尝试从指定格子拿起物品（成功则源格变空 + 图标跟手；数据仍在原格） */
+	void TryPickUpFromSlot(UEOB_Widget_InventorySlot* Slot);
+
+	/** 把手上的东西放到目标格子（交换/装备包裹/互换页签等，按来源与目标类型分发） */
+	void PlaceHeldOnSlot(UEOB_Widget_InventorySlot* TargetSlot);
+
+	/** 拖拽松手时对落点结算：格子→放下；面板外→丢弃（仅背包格来源）；否则→取消 */
+	void ResolveDropAtScreenPosition(const FVector2D& ScreenPos);
+
+	/** 查找屏幕坐标下的格子控件（先查 12 个包裹栏位，再查物品网格） */
+	UEOB_Widget_InventorySlot* FindSlotAtScreenPosition(const FVector2D& ScreenPos) const;
+
+	/** 显示跟手图标（拿起时调用） */
+	void BeginHeldIcon(UTexture2D* Icon);
+
+	/** 结束手持状态；bRestoreSourceVisual=true 时恢复源格显示（取消/原路放回） */
+	void ClearHeldItem(bool bRestoreSourceVisual);
 };

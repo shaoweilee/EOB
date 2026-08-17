@@ -26,14 +26,10 @@ void UEOB_Widget_Inventory::NativeConstruct()
 	}
 
 	// ── 格子网格：按内容自适应高度，杜绝“行数少时每行被拉高” ──
-	// UniformGridPanel 会把自己拿到的全部空间平均分给【现有】的行，
-	// 所以 20 格（3 行）时每行会被分到 440/3 ≈ 146 高。
-	// 勾了“大小到内容”后，网格高度 = 行数 × 格子期望高度。
 	if (GridPanel_Items)
 	{
 		if (UCanvasPanelSlot* GridSlot = Cast<UCanvasPanelSlot>(GridPanel_Items->Slot))
 		{
-			// 设计器里已经手动勾好就不用管（锚点/位置也在设计器里摆好了）
 			if (!GridSlot->GetAutoSize())
 			{
 				const FAnchors Anchors = GridSlot->GetAnchors();
@@ -42,7 +38,6 @@ void UEOB_Widget_Inventory::NativeConstruct()
 
 				if (bTopLeftAnchors)
 				{
-					// 保险措施：左上角锚点且没勾时，自动换算位置并开启
 					const FVector2D TopLeft = GridSlot->GetPosition() - GridSlot->GetAlignment() * GridSlot->GetSize();
 					GridSlot->SetAlignment(FVector2D(0.f, 0.f));
 					GridSlot->SetPosition(TopLeft);
@@ -95,12 +90,28 @@ void UEOB_Widget_Inventory::NativeConstruct()
 		       ));
 	}
 
-	// ── 手持物品图标：运行时创建专门的 C++ 控件（自带 Image 根 + 跟随鼠标） ──
-	// 注意：不能直接 CreateWidget<UUserWidget>——UserWidget 是抽象基类，引擎禁止直接构造。
-	HeldIcon = CreateWidget<UEOB_Widget_HeldItemIcon>(GetOwningPlayer(), UEOB_Widget_HeldItemIcon::StaticClass());
+	// ── 手持物品图标：优先用蓝图子类 WBP_HeldItemIcon（在类默认值 HeldIconWidgetClass 里指定），
+	//    留空则退化为纯 C++ 类（NativeConstruct 自建 SizeBox+Image） ──
+	const TSubclassOf<UEOB_Widget_HeldItemIcon> IconClass = HeldIconWidgetClass
+		                                                        ? HeldIconWidgetClass
+		                                                        : UEOB_Widget_HeldItemIcon::StaticClass();
+	HeldIcon = CreateWidget<UEOB_Widget_HeldItemIcon>(GetOwningPlayer(), IconClass);
 	if (HeldIcon)
 	{
 		HeldIcon->AddToViewport(1000); // 画在所有面板之上；默认 Collapsed，拿起时才显示
+		UE_LOG(LogTemp, Log, TEXT("[手持] 图标控件创建成功（类：%s），已加入视口"), *IconClass->GetName());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[手持] 图标控件创建失败！CreateWidget 返回空。"));
+	}
+
+	if (!HeldIconWidgetClass)
+	{
+		UE_LOG(LogTemp, Warning,
+		       TEXT(
+			       "[手持] 未设置 HeldIconWidgetClass，正在用纯 C++ 兜底类。建议创建 WBP_HeldItemIcon（父类 EOB_Widget_HeldItemIcon）并在 WBP_Inventory 类默认值里指定。"
+		       ));
 	}
 
 	RefreshUI();
@@ -130,6 +141,7 @@ void UEOB_Widget_Inventory::NativeTick(const FGeometry& MyGeometry, float InDelt
 		&& FVector2D::Distance(CursorPos, PotentialDragPos) >= DragThresholdPixels)
 	{
 		bDragging = true;
+		UE_LOG(LogTemp, Log, TEXT("[手持] 位移超过 %.0fpx，进入拖拽"), DragThresholdPixels);
 		if (!IsHoldingItem())
 		{
 			TryPickUpFromSlot(PotentialDragSlot.Get());
@@ -156,7 +168,6 @@ void UEOB_Widget_Inventory::SetCurrentTab(int32 NewTab)
 	if (!RefInventory) return;
 	if (NewTab < 0 || NewTab >= UEOB_InventoryComponent::NumTabs) return;
 
-	// 没装背包的栏位不能被激活
 	if (!RefInventory->IsTabActive(NewTab))
 	{
 		UE_LOG(LogTemp, Log, TEXT("[背包 UI] 第 %d 个栏位没有背包，不能切换过去。"), NewTab + 1);
@@ -164,7 +175,7 @@ void UEOB_Widget_Inventory::SetCurrentTab(int32 NewTab)
 	}
 
 	CurrentTabIndex = NewTab;
-	CloseAllTabDropdowns(); // 切页时收起所有"偏好"下拉面板
+	CloseAllTabDropdowns();
 	RefreshUI();
 }
 
@@ -207,13 +218,12 @@ void UEOB_Widget_Inventory::RefreshTabs()
 	RefreshBoxChildren(VerticalBox_TabsRight);
 }
 
-void UEOB_Widget_Inventory::RefreshUI()
+void UEOB_Widget_Inventory::RefreshUI_Implementation()
 {
 	if (!GridPanel_Items || !SlotWidgetClass || !RefInventory) return;
 
 	GridPanel_Items->ClearChildren();
 
-	// 当前页未激活（背包被卸了）：尝试自动跳回第一个激活页
 	if (!RefInventory->IsTabActive(CurrentTabIndex))
 	{
 		for (int32 Tab = 0; Tab < UEOB_InventoryComponent::NumTabs; ++Tab)
@@ -226,7 +236,6 @@ void UEOB_Widget_Inventory::RefreshUI()
 		}
 	}
 
-	// 画当前页的格子：格子数 = 该页背包容量
 	if (RefInventory->IsTabActive(CurrentTabIndex))
 	{
 		const int32 Capacity = RefInventory->GetTabCapacity(CurrentTabIndex);
@@ -238,7 +247,6 @@ void UEOB_Widget_Inventory::RefreshUI()
 			FEOBItemInstance Item;
 			RefInventory->GetItemAt(CurrentTabIndex, i, Item);
 
-			// 物品栏统一把格子实例定成 110×110（皮肤本身不定死，装备面板不受影响）
 			SlotWidget->SetSlotDesiredSize(InventorySlotSize);
 
 			SlotWidget->InitInventorySlot(RefInventory, CurrentTabIndex, i, this);
@@ -247,31 +255,36 @@ void UEOB_Widget_Inventory::RefreshUI()
 		}
 	}
 
-	// 页签状态跟着刷新（激活/禁用、当前页高亮、偏好图标、包裹栏位）
 	RefreshTabs();
 }
 
 // ===================== 抓取 / 拖拽 =====================
 
-void UEOB_Widget_Inventory::NotifySlotLeftPressed(UEOB_Widget_InventorySlot* InventorySlot, const FVector2D& ScreenPos)
+void UEOB_Widget_Inventory::NotifySlotLeftPressed(UEOB_Widget_InventorySlot* Slot, const FVector2D& ScreenPos)
 {
-	PotentialDragSlot = InventorySlot;
+	PotentialDragSlot = Slot;
 	PotentialDragPos = ScreenPos;
+	UE_LOG(LogTemp, Log, TEXT("[手持] 登记拖拽起点：模式=%d，页=%d，格=%d"),
+	       static_cast<int32>(Slot->GetMode()), Slot->GetTabIndex(), Slot->GetSlotInTab());
 }
 
-void UEOB_Widget_Inventory::OnSlotGrabClicked(UEOB_Widget_InventorySlot* InventorySlot)
+void UEOB_Widget_Inventory::OnSlotGrabClicked(UEOB_Widget_InventorySlot* Slot)
 {
 	// 拖拽中松开会触发起点按钮的 OnClicked（UMG 按钮默认 DownAndUp，松手即触发），
 	// 这次"点击"必须忽略——拖拽的落点由 Tick 里的 ResolveDropAtScreenPosition 结算。
 	if (bDragging) return;
 
+	UE_LOG(LogTemp, Log, TEXT("[手持] 原地点击：模式=%d，页=%d，格=%d，当前%s"),
+	       static_cast<int32>(Slot->GetMode()), Slot->GetTabIndex(), Slot->GetSlotInTab(),
+	       IsHoldingItem() ? TEXT("手上有东西→放下") : TEXT("手上空→拿起"));
+
 	if (IsHoldingItem())
 	{
-		PlaceHeldOnSlot(InventorySlot); // 手上已有物品：这次点击 = 放下
+		PlaceHeldOnSlot(Slot);
 	}
 	else
 	{
-		TryPickUpFromSlot(InventorySlot); // 手上没有：这次点击 = 拿起
+		TryPickUpFromSlot(Slot);
 	}
 }
 
@@ -280,40 +293,47 @@ void UEOB_Widget_Inventory::CancelHeldItem()
 	ClearHeldItem(true);
 }
 
-void UEOB_Widget_Inventory::TryPickUpFromSlot(UEOB_Widget_InventorySlot* InventorySlot)
+void UEOB_Widget_Inventory::TryPickUpFromSlot(UEOB_Widget_InventorySlot* Slot)
 {
-	if (!RefInventory || !InventorySlot || IsHoldingItem()) return;
+	if (!RefInventory || !Slot || IsHoldingItem()) return;
 
 	FEOBItemInstance Item;
 	EEOBHeldSourceType SourceType = EEOBHeldSourceType::None;
 
-	if (InventorySlot->GetMode() == EEOBSlotWidgetMode::Inventory)
+	if (Slot->GetMode() == EEOBSlotWidgetMode::Inventory)
 	{
-		if (RefInventory->GetItemAt(InventorySlot->GetTabIndex(), InventorySlot->GetSlotInTab(), Item) && Item.IsValid())
+		if (RefInventory->GetItemAt(Slot->GetTabIndex(), Slot->GetSlotInTab(), Item) && Item.IsValid())
 		{
 			SourceType = EEOBHeldSourceType::InventorySlot;
-			HeldTab = InventorySlot->GetTabIndex();
-			HeldSlot = InventorySlot->GetSlotInTab();
+			HeldTab = Slot->GetTabIndex();
+			HeldSlot = Slot->GetSlotInTab();
 		}
 	}
-	else if (InventorySlot->GetMode() == EEOBSlotWidgetMode::BagSlot)
+	else if (Slot->GetMode() == EEOBSlotWidgetMode::BagSlot)
 	{
-		if (RefInventory->GetTabBag(InventorySlot->GetTabIndex(), Item) && Item.IsValid())
+		if (RefInventory->GetTabBag(Slot->GetTabIndex(), Item) && Item.IsValid())
 		{
 			SourceType = EEOBHeldSourceType::BagSlot;
-			HeldTab = InventorySlot->GetTabIndex();
+			HeldTab = Slot->GetTabIndex();
 			HeldSlot = INDEX_NONE;
 		}
 	}
 
-	if (SourceType == EEOBHeldSourceType::None || !Item.Definition) return;
+	if (SourceType == EEOBHeldSourceType::None || !Item.Definition)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[手持] 拿起失败：这一格是空的（或没有 Definition）"));
+		return;
+	}
 
 	// 注意：东西仍在原格（数据不动），只是源格显示为空 + 图标跟手。
-	// 放下时调用组件的移动/换包函数一次性完成，中途取消零成本、零风险。
 	HeldSource = SourceType;
-	HeldGhostSlot = InventorySlot;
-	InventorySlot->UpdateSlot(FEOBItemInstance());
+	HeldGhostSlot = Slot;
+	Slot->UpdateSlot(FEOBItemInstance());
 	BeginHeldIcon(Item.Definition->Icon);
+
+	UE_LOG(LogTemp, Log, TEXT("[手持] 已拿起【%s】（来源=%s）"),
+	       *Item.Definition->ItemName.ToString(),
+	       SourceType == EEOBHeldSourceType::BagSlot ? TEXT("包裹栏位") : TEXT("背包格"));
 }
 
 void UEOB_Widget_Inventory::PlaceHeldOnSlot(UEOB_Widget_InventorySlot* TargetSlot)
@@ -329,24 +349,20 @@ void UEOB_Widget_Inventory::PlaceHeldOnSlot(UEOB_Widget_InventorySlot* TargetSlo
 	{
 		if (TargetMode == EEOBSlotWidgetMode::Inventory)
 		{
-			// 放回同一格 = 放下不动
 			if (TargetTab == HeldTab && TargetSlotInTab == HeldSlot)
 			{
 				ClearHeldItem(true);
 				return;
 			}
-			// 目标格为空 = 移动；有货 = 互换
 			if (RefInventory->MoveOrSwapItem(HeldTab, HeldSlot, TargetTab, TargetSlotInTab))
 			{
 				ClearHeldItem(false);
 			}
-			// 失败：继续拿着（右键可取消）
 			return;
 		}
 
 		if (TargetMode == EEOBSlotWidgetMode::BagSlot)
 		{
-			// 包裹栏位只接受"背包物品"：空栏位 = 装备到该页；有包 = 换包（组件内部做容量检查）
 			FEOBItemInstance Item;
 			if (RefInventory->GetItemAt(HeldTab, HeldSlot, Item) && Item.IsValid()
 				&& Item.Definition && Item.Definition->Kind == EEOBItemKind::Bag)
@@ -363,21 +379,19 @@ void UEOB_Widget_Inventory::PlaceHeldOnSlot(UEOB_Widget_InventorySlot* TargetSlo
 			return;
 		}
 
-		// 目标是装备面板的格子：下一阶段才支持，本次不动
 		return;
 	}
 
-	// ── 来源：包裹栏位（拿的是装备的背包） ──
+	// ── 来源：包裹栏位 ──
 	if (HeldSource == EEOBHeldSourceType::BagSlot)
 	{
 		if (TargetMode == EEOBSlotWidgetMode::BagSlot)
 		{
 			if (TargetTab == HeldTab)
 			{
-				ClearHeldItem(true); // 放回原栏位
+				ClearHeldItem(true);
 				return;
 			}
-			// 两个包裹栏位互换位置（连带包内物品；目标为空 = 挪过去）
 			if (RefInventory->SwapTabs(HeldTab, TargetTab))
 			{
 				ClearHeldItem(false);
@@ -387,7 +401,6 @@ void UEOB_Widget_Inventory::PlaceHeldOnSlot(UEOB_Widget_InventorySlot* TargetSlo
 
 		if (TargetMode == EEOBSlotWidgetMode::Inventory)
 		{
-			// 把装备的背包卸到指定物品格（= 取消装备包裹；包内有物品时组件会拒绝）
 			if (RefInventory->UnequipBagToSlot(HeldTab, TargetTab, TargetSlotInTab))
 			{
 				ClearHeldItem(false);
@@ -401,17 +414,14 @@ void UEOB_Widget_Inventory::ResolveDropAtScreenPosition(const FVector2D& ScreenP
 {
 	if (!IsHoldingItem()) return;
 
-	// 落在某个格子上：走正常放下逻辑
 	if (UEOB_Widget_InventorySlot* TargetSlot = FindSlotAtScreenPosition(ScreenPos))
 	{
 		PlaceHeldOnSlot(TargetSlot);
 		return;
 	}
 
-	// 没落在任何格子上
 	if (HeldSource == EEOBHeldSourceType::InventorySlot)
 	{
-		// 拖出物品栏面板范围 = 丢到地上（保留品质和词缀）；还在面板内 = 放回原处
 		const bool bOutsidePanel = !GetCachedGeometry().IsUnderLocation(ScreenPos);
 		if (bOutsidePanel && RefInventory)
 		{
@@ -420,30 +430,28 @@ void UEOB_Widget_Inventory::ResolveDropAtScreenPosition(const FVector2D& ScreenP
 			{
 				if (RefInventory->DropItemToWorld(HeldTab, HeldSlot))
 				{
-					ClearHeldItem(false); // 已经丢出去了（刷新会重建格子，无需还原源格）
+					ClearHeldItem(false);
 					return;
 				}
 			}
 		}
-		ClearHeldItem(true); // 面板内松手 / 丢弃失败：放回原处
+		ClearHeldItem(true);
 		return;
 	}
 
-	// 包裹栏位上拿起来的背包：落在空处 = 取消（装备的背包不允许丢到地上）
 	ClearHeldItem(true);
 }
 
 UEOB_Widget_InventorySlot* UEOB_Widget_Inventory::FindSlotAtScreenPosition(const FVector2D& ScreenPos) const
 {
-	auto IsSlotUnderCursor = [&ScreenPos](UEOB_Widget_InventorySlot* InventorySlot) -> bool
+	auto IsSlotUnderCursor = [&ScreenPos](UEOB_Widget_InventorySlot* Slot) -> bool
 	{
-		if (!InventorySlot) return false;
-		const ESlateVisibility Vis = InventorySlot->GetVisibility();
+		if (!Slot) return false;
+		const ESlateVisibility Vis = Slot->GetVisibility();
 		if (Vis == ESlateVisibility::Collapsed || Vis == ESlateVisibility::Hidden) return false;
-		return InventorySlot->GetCachedGeometry().IsUnderLocation(ScreenPos);
+		return Slot->GetCachedGeometry().IsUnderLocation(ScreenPos);
 	};
 
-	// 12 个包裹栏位（页签左侧的 Slot_Bag）
 	auto FindInTabs = [&IsSlotUnderCursor](UVerticalBox* Box) -> UEOB_Widget_InventorySlot*
 	{
 		if (!Box) return nullptr;
@@ -461,14 +469,13 @@ UEOB_Widget_InventorySlot* UEOB_Widget_Inventory::FindSlotAtScreenPosition(const
 	if (UEOB_Widget_InventorySlot* Found = FindInTabs(VerticalBox_TabsLeft)) return Found;
 	if (UEOB_Widget_InventorySlot* Found = FindInTabs(VerticalBox_TabsRight)) return Found;
 
-	// 当前页的物品格子
 	if (GridPanel_Items)
 	{
 		for (UWidget* Child : GridPanel_Items->GetAllChildren())
 		{
-			if (UEOB_Widget_InventorySlot* InventorySlot = Cast<UEOB_Widget_InventorySlot>(Child))
+			if (UEOB_Widget_InventorySlot* Slot = Cast<UEOB_Widget_InventorySlot>(Child))
 			{
-				if (IsSlotUnderCursor(InventorySlot)) return InventorySlot;
+				if (IsSlotUnderCursor(Slot)) return Slot;
 			}
 		}
 	}
@@ -482,11 +489,14 @@ void UEOB_Widget_Inventory::BeginHeldIcon(UTexture2D* Icon)
 	{
 		HeldIcon->ShowIcon(Icon, HeldIconSize);
 	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[手持] 要显示图标时 HeldIcon 是空的！"));
+	}
 }
 
 void UEOB_Widget_Inventory::ClearHeldItem(bool bRestoreSourceVisual)
 {
-	// 还原源格显示（取消手持/放回原处时；成功放下后格子已被刷新重建，弱引用自动失效）
 	if (bRestoreSourceVisual && RefInventory && HeldGhostSlot.IsValid())
 	{
 		FEOBItemInstance Item;
