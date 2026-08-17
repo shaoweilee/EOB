@@ -164,6 +164,9 @@ void UEOB_Widget_Inventory::NativeTick(const FGeometry& MyGeometry, float InDelt
 		}
 		PotentialDragSlot = nullptr;
 	}
+
+	// 手持时的"禁止投放"红框提示（覆盖所有面板的所有格子，含装备栏位）
+	UpdateForbiddenHighlights(CursorPos);
 }
 
 void UEOB_Widget_Inventory::SetCurrentTab(int32 NewTab)
@@ -404,6 +407,13 @@ void UEOB_Widget_Inventory::PlaceHeldOnSlot(UEOB_Widget_InventorySlot* TargetSlo
 
 		if (TargetMode == EEOBSlotWidgetMode::Inventory)
 		{
+			// 方案一：禁止把包放进它自己那一页——否则该页失去包裹变未激活，
+			// 包会被藏进一页看不见摸不着的背包里（悬停时红框已提示）。
+			if (TargetTab == HeldTab)
+			{
+				UE_LOG(LogTemp, Log, TEXT("[背包 UI] 不能把包裹放进它自己那一页。"));
+				return; // 保持手持，主人可以换页再放，或右键取消
+			}
 			if (RefInventory->UnequipBagToSlot(HeldTab, TargetTab, TargetSlotInTab))
 			{
 				ClearHeldItem(false);
@@ -421,6 +431,21 @@ void UEOB_Widget_Inventory::ResolveDropAtScreenPosition(const FVector2D& ScreenP
 	{
 		PlaceHeldOnSlot(TargetSlot);
 		return;
+	}
+
+	// 背包面板内没找到 → 看看是不是落在"其他面板的格子"上（比如装备栏位）：
+	// 那种地方不接受投放（红框已提示），按取消处理——东西回原处，绝不误丢到地上。
+	for (const TWeakObjectPtr<UEOB_Widget_InventorySlot>& SlotPtr : UEOB_Widget_InventorySlot::GetAllSlotWidgets())
+	{
+		UEOB_Widget_InventorySlot* AnySlot = SlotPtr.Get();
+		if (!AnySlot) continue;
+		const ESlateVisibility Vis = AnySlot->GetVisibility();
+		if (Vis == ESlateVisibility::Collapsed || Vis == ESlateVisibility::Hidden) continue;
+		if (AnySlot->GetCachedGeometry().IsUnderLocation(ScreenPos))
+		{
+			ClearHeldItem(true);
+			return;
+		}
 	}
 
 	if (HeldSource == EEOBHeldSourceType::InventorySlot)
@@ -484,6 +509,109 @@ UEOB_Widget_InventorySlot* UEOB_Widget_Inventory::FindSlotAtScreenPosition(const
 	}
 
 	return nullptr;
+}
+
+// ===================== 禁止投放红框 =====================
+
+void UEOB_Widget_Inventory::UpdateForbiddenHighlights(const FVector2D& ScreenPos)
+{
+	TArray<TWeakObjectPtr<UEOB_Widget_InventorySlot>>& AllSlots = UEOB_Widget_InventorySlot::GetAllSlotWidgets();
+
+	// 顺手清掉已失效的弱引用（网格每次刷新都会重建格子）
+	AllSlots.RemoveAllSwap([](const TWeakObjectPtr<UEOB_Widget_InventorySlot>& Ptr) { return !Ptr.IsValid(); });
+
+	for (const TWeakObjectPtr<UEOB_Widget_InventorySlot>& SlotPtr : AllSlots)
+	{
+		UEOB_Widget_InventorySlot* SlotWidget = SlotPtr.Get();
+		if (!SlotWidget) continue;
+
+		bool bRed = false;
+		if (IsHoldingItem())
+		{
+			const ESlateVisibility Vis = SlotWidget->GetVisibility();
+			if (Vis != ESlateVisibility::Collapsed && Vis != ESlateVisibility::Hidden
+				&& SlotWidget->GetCachedGeometry().IsUnderLocation(ScreenPos))
+			{
+				bRed = !WouldAcceptDrop(SlotWidget);
+			}
+		}
+		SlotWidget->SetForbiddenHighlight(bRed);
+	}
+}
+
+bool UEOB_Widget_Inventory::WouldAcceptDrop(const UEOB_Widget_InventorySlot* TargetSlot) const
+{
+	if (!RefInventory || !TargetSlot || !IsHoldingItem()) return true;
+
+	// 装备栏位：装备侧的抓取/投放还没做（下一阶段），目前一律不接受 → 悬停必红。
+	// 以后做"禁止装备"（职业/等级/槽位不符）时，规则也加在这个分支里。
+	if (TargetSlot->GetMode() == EEOBSlotWidgetMode::Equipment)
+	{
+		return false;
+	}
+
+	// 手上拿着的物品（懒转移模型：数据仍在原格，能直接查到）
+	FEOBItemInstance HeldItem;
+	bool bGotHeld = false;
+	if (HeldSource == EEOBHeldSourceType::InventorySlot)
+	{
+		bGotHeld = RefInventory->GetItemAt(HeldTab, HeldSlot, HeldItem);
+	}
+	else if (HeldSource == EEOBHeldSourceType::BagSlot)
+	{
+		bGotHeld = RefInventory->GetTabBag(HeldTab, HeldItem);
+	}
+	if (!bGotHeld || !HeldItem.IsValid() || !HeldItem.Definition) return true;
+
+	const bool bHeldIsBag = (HeldItem.Definition->Kind == EEOBItemKind::Bag);
+
+	// 目标：包裹栏位
+	if (TargetSlot->GetMode() == EEOBSlotWidgetMode::BagSlot)
+	{
+		if (HeldSource == EEOBHeldSourceType::BagSlot)
+		{
+			return true; // 包 ↔ 包裹栏位 = 互换页签位置，总是可以
+		}
+		return bHeldIsBag; // 背包格 → 包裹栏位：只有背包物品能放上去
+	}
+
+	// 目标：背包格，来源：包裹栏位（拿着的是已装备的包）
+	if (HeldSource == EEOBHeldSourceType::BagSlot)
+	{
+		// 禁止放进它自己那一页（页会失活，包被藏起来）
+		if (TargetSlot->GetTabIndex() == HeldTab) return false;
+
+		// 包内非空不能卸下：此时任何背包格都不接受
+		if (!IsHeldBagEmpty()) return false;
+
+		// 目标格必须为空
+		FEOBItemInstance TargetItem;
+		if (RefInventory->GetItemAt(TargetSlot->GetTabIndex(), TargetSlot->GetSlotInTab(), TargetItem)
+			&& TargetItem.IsValid())
+		{
+			return false;
+		}
+		return true;
+	}
+
+	// 背包格 → 背包格：移动/交换总是可以
+	return true;
+}
+
+bool UEOB_Widget_Inventory::IsHeldBagEmpty() const
+{
+	if (!RefInventory || HeldSource != EEOBHeldSourceType::BagSlot) return true;
+
+	const int32 Capacity = RefInventory->GetTabCapacity(HeldTab);
+	for (int32 i = 0; i < Capacity; ++i)
+	{
+		FEOBItemInstance Item;
+		if (RefInventory->GetItemAt(HeldTab, i, Item) && Item.IsValid())
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 void UEOB_Widget_Inventory::BeginHeldIcon(UTexture2D* Icon)

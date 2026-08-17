@@ -7,6 +7,17 @@
 #include "EOB_ItemFunctionLibrary.h"
 #include "EOB_Widget_Inventory.h"
 
+namespace EOBSlotWidgetRegistry
+{
+	/** 全局格子注册表：背包/包裹栏位/装备面板的格子都在里面，供面板做"禁止投放"红框检测 */
+	TArray<TWeakObjectPtr<UEOB_Widget_InventorySlot>> GAllSlotWidgets;
+}
+
+TArray<TWeakObjectPtr<UEOB_Widget_InventorySlot>>& UEOB_Widget_InventorySlot::GetAllSlotWidgets()
+{
+	return EOBSlotWidgetRegistry::GAllSlotWidgets;
+}
+
 void UEOB_Widget_InventorySlot::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -16,6 +27,20 @@ void UEOB_Widget_InventorySlot::NativeConstruct()
 	{
 		Button->OnClicked.AddDynamic(this, &UEOB_Widget_InventorySlot::OnSlotClicked);
 	}
+
+	// 登记进全局列表（网格每帧重建也没关系，弱引用 + 析构注销 + 面板侧顺手清理）
+	EOBSlotWidgetRegistry::GAllSlotWidgets.AddUnique(this);
+}
+
+void UEOB_Widget_InventorySlot::NativeDestruct()
+{
+	EOBSlotWidgetRegistry::GAllSlotWidgets.RemoveAll(
+		[this](const TWeakObjectPtr<UEOB_Widget_InventorySlot>& Ptr)
+		{
+			return !Ptr.IsValid() || Ptr.Get() == this;
+		});
+
+	Super::NativeDestruct();
 }
 
 void UEOB_Widget_InventorySlot::InitInventorySlot(UEOB_InventoryComponent* Inv, int32 InTabIndex,
@@ -57,6 +82,9 @@ void UEOB_Widget_InventorySlot::SetSlotDesiredSize(float InSize)
 
 void UEOB_Widget_InventorySlot::UpdateSlot(const FEOBItemInstance& Item)
 {
+	// 缓存下来：红框取消时按它恢复品质色
+	LastItem = Item;
+
 	if (Item.IsValid() && Item.Definition)
 	{
 		const FLinearColor RarityColor = UEOB_ItemFunctionLibrary::GetRarityColor(Item.Rarity);
@@ -83,6 +111,21 @@ void UEOB_Widget_InventorySlot::UpdateSlot(const FEOBItemInstance& Item)
 		Image_frame->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 		Image_frame->SetColorAndOpacity(FLinearColor(1.f, 1.f, 1.f, 0.15f));
 	}
+
+	// 禁止投放提示优先于一切常规染色：整框染红
+	if (bForbidden)
+	{
+		Image_frame->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		Image_frame->SetColorAndOpacity(FLinearColor(1.f, 0.08f, 0.05f, 1.f));
+	}
+}
+
+void UEOB_Widget_InventorySlot::SetForbiddenHighlight(bool bOn)
+{
+	if (bForbidden == bOn) return;
+	bForbidden = bOn;
+	// 重走一遍常规染色：bForbidden=true 时末尾会整框染红；false 时恢复成品质色/淡灰
+	UpdateSlot(LastItem);
 }
 
 void UEOB_Widget_InventorySlot::OnSlotClicked()

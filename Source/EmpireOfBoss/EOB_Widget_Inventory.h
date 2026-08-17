@@ -26,10 +26,12 @@ enum class EEOBHeldSourceType : uint8
  * - 左右两列页签（VerticalBox_TabsLeft / VerticalBox_TabsRight），共 12 个
  * - 抓取（原地点击）/ 拖拽（按住移动超阈值）/ 拖出面板丢弃，由本类集中处理
  * - 手持物品通过 HeldIcon 图标跟手显示（HitTestInvisible，不挡点击）
+ * - 手持时每帧刷新"禁止投放"红框：鼠标下不接受当前物品的格子（含装备面板的格子）边框染红
  *
  * 抓取：原地点击 = 拿起（东西仍在原格，源格变空 + 图标跟手）；再点目标格 = 放下/交换。
  * 拖拽：按下移动超过 DragThresholdPixels 后松手 = 对落点结算；落在面板外 = 丢到地上（仅背包格来源）。
  * 任何时刻右键 = 取消拿起（东西回源格显示，数据从未动过）。
+ * 已装备的包禁止放进"它自己那一页"的格子（否则页失活，包被藏进看不见的页里）。
  */
 UCLASS()
 class EMPIREOFBOSS_API UEOB_Widget_Inventory : public UUserWidget
@@ -160,6 +162,18 @@ private:
 
 	/** 查找屏幕坐标下的格子控件（先查 12 个包裹栏位，再查物品网格） */
 	UEOB_Widget_InventorySlot* FindSlotAtScreenPosition(const FVector2D& ScreenPos) const;
+
+	/** 每帧刷新"禁止投放"红框：手持时，鼠标下不接受当前物品的格子染红（含装备面板格子） */
+	void UpdateForbiddenHighlights(const FVector2D& ScreenPos);
+
+	/**
+	 * 判定目标格子按当前规则能否接受手持物（纯判定，不动数据）。
+	 * 以后做"禁止装备"（职业/等级不符等）也在这个函数里加规则。
+	 */
+	bool WouldAcceptDrop(const UEOB_Widget_InventorySlot* TargetSlot) const;
+
+	/** 手持的是"已装备的包"时，包内是否为空（非空不能卸下） */
+	bool IsHeldBagEmpty() const;
 
 	/** 显示跟手图标（拿起时调用） */
 	void BeginHeldIcon(UTexture2D* Icon);
