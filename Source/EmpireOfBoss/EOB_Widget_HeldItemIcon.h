@@ -19,6 +19,13 @@ class USizeBox;
  *
  * 自己 Tick 跟随鼠标（图标中心对准光标）；HitTestInvisible，绝不挡点击。
  * 由背包面板（EOB_Widget_Inventory）运行时创建并加到视口最高层。
+ *
+ * 跟随坐标的门道（两套坐标系各有一个毛病，取长补短）：
+ *  - PC->GetMousePosition：坐标空间和 SetPositionInViewport 完全对齐（抓取模式验证过），
+ *    但左键按住被按钮捕获时，它读的视口缓存会冻结在按下位置；
+ *  - FSlateApplication::GetCursorPos：永远实时（桌面坐标），但空间和视口坐标系不同。
+ *  做法：ShowIcon 时两者各取一次算出差值（CursorSpaceOffset），之后每帧用
+ *  实时光标 + 差值 得到正确视口坐标。
  */
 UCLASS()
 class EMPIREOFBOSS_API UEOB_Widget_HeldItemIcon : public UUserWidget
@@ -50,4 +57,13 @@ private:
 
 	/** 诊断用：Tick 里只打一次日志 */
 	bool bLoggedFirstTick = false;
+
+	/** PC 鼠标坐标系 与 Slate 桌面坐标系 的固定差值（ShowIcon 时校准） */
+	FVector2D CursorSpaceOffset = FVector2D::ZeroVector;
+
+	/** 用 PC 坐标（正确空间）与 Slate 实时光标（桌面坐标）算出固定差值 */
+	void CalibrateCursorSpaceOffset();
+
+	/** 立刻把图标摆到鼠标当前位置（实时光标 + 校准差值） */
+	void SyncPositionToCursor();
 };

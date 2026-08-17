@@ -2,7 +2,8 @@
 #include "Components/Image.h"
 #include "Components/SizeBox.h"
 #include "Blueprint/WidgetTree.h"
-#include "GameFramework/PlayerController.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
+#include "Framework/Application/SlateApplication.h"
 
 void UEOB_Widget_HeldItemIcon::NativeConstruct()
 {
@@ -58,14 +59,7 @@ void UEOB_Widget_HeldItemIcon::ShowIcon(UTexture2D* Icon, float InSize)
 	SetVisibility(ESlateVisibility::HitTestInvisible); // 显示但不挡任何点击
 
 	// 立刻摆到鼠标当前位置（不用等下一帧 Tick）
-	if (APlayerController* PC = GetOwningPlayer())
-	{
-		float MouseX = 0.f, MouseY = 0.f;
-		if (PC->GetMousePosition(MouseX, MouseY))
-		{
-			SetPositionInViewport(FVector2D(MouseX, MouseY));
-		}
-	}
+	SyncPositionToCursor();
 
 	UE_LOG(LogTemp, Log, TEXT("[手持] ShowIcon：贴图=%s，边长=%.0f，期望尺寸=(%.0f, %.0f)"),
 	       Icon ? TEXT("有效") : TEXT("空！"),
@@ -86,19 +80,34 @@ void UEOB_Widget_HeldItemIcon::NativeTick(const FGeometry& MyGeometry, float InD
 	if (GetVisibility() == ESlateVisibility::Collapsed) return;
 
 	// 跟随鼠标（配合 SetAlignmentInViewport(0.5,0.5)，图标中心 = 光标位置）
-	if (APlayerController* PC = GetOwningPlayer())
-	{
-		float MouseX = 0.f, MouseY = 0.f;
-		if (PC->GetMousePosition(MouseX, MouseY))
-		{
-			SetPositionInViewport(FVector2D(MouseX, MouseY));
+	SyncPositionToCursor();
 
-			// 只打第一帧，确认 Tick 在跑
-			if (!bLoggedFirstTick)
-			{
-				bLoggedFirstTick = true;
-				UE_LOG(LogTemp, Log, TEXT("[手持] Tick 跟随中，鼠标=(%.0f, %.0f)"), MouseX, MouseY);
-			}
-		}
+	// 只打第一帧，确认 Tick 在跑
+	if (!bLoggedFirstTick)
+	{
+		bLoggedFirstTick = true;
+		UE_LOG(LogTemp, Log, TEXT("[手持] Tick 跟随中"));
+	}
+}
+
+bool UEOB_Widget_HeldItemIcon::GetLiveMousePositionOnViewport(FVector2D& OutViewportPos) const
+{
+	if (!FSlateApplication::IsInitialized()) return false;
+
+	// 关键：必须用 FSlateApplication 的光标位置（桌面坐标，每帧实时更新）。
+	// 不能用 PlayerController::GetMousePosition——它读的是视口缓存的鼠标坐标，
+	// 左键按住时 UMG 按钮捕获了鼠标，那份缓存会被冻结在按下的位置（拖拽时图标钉在原地就是它干的）。
+	const FGeometry ViewportGeometry = UWidgetLayoutLibrary::GetViewportWidgetGeometry(
+		const_cast<UEOB_Widget_HeldItemIcon*>(this));
+	OutViewportPos = ViewportGeometry.AbsoluteToLocal(FSlateApplication::Get().GetCursorPos());
+	return true;
+}
+
+void UEOB_Widget_HeldItemIcon::SyncPositionToCursor()
+{
+	FVector2D ViewportPos;
+	if (GetLiveMousePositionOnViewport(ViewportPos))
+	{
+		SetPositionInViewport(ViewportPos);
 	}
 }
