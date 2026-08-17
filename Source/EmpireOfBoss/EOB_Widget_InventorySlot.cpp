@@ -5,6 +5,7 @@
 #include "EOB_InventoryComponent.h"
 #include "EOB_ItemDefinition.h"
 #include "EOB_ItemFunctionLibrary.h"
+#include "EOB_Widget_Inventory.h"
 
 void UEOB_Widget_InventorySlot::NativeConstruct()
 {
@@ -17,10 +18,12 @@ void UEOB_Widget_InventorySlot::NativeConstruct()
 	}
 }
 
-void UEOB_Widget_InventorySlot::InitInventorySlot(UEOB_InventoryComponent* Inv, int32 InTabIndex, int32 InSlotInTab)
+void UEOB_Widget_InventorySlot::InitInventorySlot(UEOB_InventoryComponent* Inv, int32 InTabIndex,
+                                                  int32 InSlotInTab, UEOB_Widget_Inventory* OwnerPanel)
 {
 	Mode = EEOBSlotWidgetMode::Inventory;
 	RefInventory = Inv;
+	RefPanel = OwnerPanel;
 	TabIndex = InTabIndex;
 	SlotInTab = InSlotInTab;
 }
@@ -30,6 +33,16 @@ void UEOB_Widget_InventorySlot::InitEquipmentSlot(UEOB_InventoryComponent* Inv, 
 	Mode = EEOBSlotWidgetMode::Equipment;
 	RefInventory = Inv;
 	EquipSlot = InEquipSlot;
+}
+
+void UEOB_Widget_InventorySlot::InitBagSlot(UEOB_InventoryComponent* Inv, int32 InTabIndex,
+                                            UEOB_Widget_Inventory* OwnerPanel)
+{
+	Mode = EEOBSlotWidgetMode::BagSlot;
+	RefInventory = Inv;
+	RefPanel = OwnerPanel;
+	TabIndex = InTabIndex;
+	SlotInTab = INDEX_NONE; // 包裹栏位没有"页内格号"的概念
 }
 
 void UEOB_Widget_InventorySlot::SetSlotDesiredSize(float InSize)
@@ -76,32 +89,74 @@ void UEOB_Widget_InventorySlot::OnSlotClicked()
 {
 	if (!RefInventory.IsValid()) return;
 
-	// 左键：背包格留给"抓取/拖拽"（下一步实现）；装备格暂时保留"点击卸下"作为过渡
+	// 装备格：手上拿着东西时不动作；否则保留"点击卸下"作为过渡（装备面板抓取在下一阶段做）
 	if (Mode == EEOBSlotWidgetMode::Equipment)
 	{
+		if (RefPanel.IsValid() && RefPanel->IsHoldingItem()) return;
 		RefInventory->UnequipItem(EquipSlot);
+		return;
 	}
+
+	// 背包格 / 包裹栏位：原地点击 = 抓取手势的"拿起 / 放下"，统一交给面板的状态机
+	if (RefPanel.IsValid())
+	{
+		RefPanel->OnSlotGrabClicked(this);
+	}
+}
+
+FReply UEOB_Widget_InventorySlot::NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry,
+                                                                 const FPointerEvent& InMouseEvent)
+{
+	// 左键按下：向面板登记"拖拽起点"。面板在 Tick 里检测位移超过阈值就进入拖拽。
+	// 注意这里只是登记，不吞事件——原地松开时 Button 的 OnClicked 照常触发（= 抓取）。
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton
+		&& RefPanel.IsValid()
+		&& Mode != EEOBSlotWidgetMode::Equipment)
+	{
+		RefPanel->NotifySlotLeftPressed(this, InMouseEvent.GetScreenSpacePosition());
+	}
+
+	return Super::NativeOnPreviewMouseButtonDown(InGeometry, InMouseEvent);
 }
 
 FReply UEOB_Widget_InventorySlot::NativeOnMouseButtonDown(const FGeometry& InGeometry,
                                                           const FPointerEvent& InMouseEvent)
 {
-	// 右键单击背包格：装备穿到默认槽位；背包物品装到第一个空栏位
-	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton
-		&& Mode == EEOBSlotWidgetMode::Inventory
-		&& RefInventory.IsValid())
+	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton && RefInventory.IsValid())
 	{
-		FEOBItemInstance Item;
-		if (RefInventory->GetItemAt(TabIndex, SlotInTab, Item) && Item.IsValid())
+		// 手里拿着东西时：任何右键 = 放回原处（取消手持），优先级最高
+		if (RefPanel.IsValid() && RefPanel->IsHoldingItem())
 		{
-			if (Item.Definition->Kind == EEOBItemKind::Bag)
+			RefPanel->CancelHeldItem();
+			return FReply::Handled();
+		}
+
+		// 右键单击背包格：装备穿到默认槽位；背包物品装到第一个空包裹栏位
+		if (Mode == EEOBSlotWidgetMode::Inventory)
+		{
+			FEOBItemInstance Item;
+			if (RefInventory->GetItemAt(TabIndex, SlotInTab, Item) && Item.IsValid())
 			{
-				RefInventory->EquipBagFromInventory(TabIndex, SlotInTab);
+				if (Item.Definition->Kind == EEOBItemKind::Bag)
+				{
+					RefInventory->EquipBagFromInventory(TabIndex, SlotInTab);
+				}
+				else
+				{
+					RefInventory->EquipFromInventory(TabIndex, SlotInTab);
+				}
 			}
-			else
+			return FReply::Handled();
+		}
+
+		// 右键单击包裹栏位 = 取消装备包裹（包内还有物品时组件会拒绝）
+		if (Mode == EEOBSlotWidgetMode::BagSlot)
+		{
+			if (RefInventory->IsTabActive(TabIndex))
 			{
-				RefInventory->EquipFromInventory(TabIndex, SlotInTab);
+				RefInventory->UnequipBag(TabIndex);
 			}
+			// 空栏位也吞掉右键，免得冒泡给页签把"偏好"下拉面弹出来
 			return FReply::Handled();
 		}
 	}

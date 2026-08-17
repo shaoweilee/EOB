@@ -35,7 +35,9 @@ void UEOB_InventoryComponent::BeginPlay()
 	else
 	{
 		UE_LOG(LogTemp, Error,
-		       TEXT("[背包] StartingBagDefinition 未配置！玩家开局没有任何背包，无法拾取物品。请到主角蓝图的 InventoryComponent 默认值里指定一个背包 DA（Kind=背包）。"));
+		       TEXT(
+			       "[背包] StartingBagDefinition 未配置！玩家开局没有任何背包，无法拾取物品。请到主角蓝图的 InventoryComponent 默认值里指定一个背包 DA（Kind=背包）。"
+		       ));
 	}
 
 	// 🛡️ 防御：Live Coding 热重载偶尔会静默冲掉蓝图里配置的引用。
@@ -238,6 +240,85 @@ bool UEOB_InventoryComponent::SwapBagOnTab(int32 TabIndex, int32 FromTab, int32 
 	return true;
 }
 
+bool UEOB_InventoryComponent::EquipBagFromSlotToTab(int32 FromTab, int32 FromSlot, int32 ToTab)
+{
+	if (!IsValidTab(FromTab) || !IsValidTab(ToTab)) return false;
+	FEOBInventoryTab& SourceTab = Tabs[FromTab];
+	if (!SourceTab.Slots.IsValidIndex(FromSlot) || !SourceTab.Slots[FromSlot].IsValid()) return false;
+
+	const FEOBItemInstance Bag = SourceTab.Slots[FromSlot];
+	if (Bag.Definition->Kind != EEOBItemKind::Bag)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[背包] %s 不是背包物品，不能装进包裹栏位。"),
+		       *Bag.Definition->ItemName.ToString());
+		return false;
+	}
+
+	// 目标栏位已有背包：走换包（容量检查 + 物品迁移 + 旧包回源格）
+	if (Tabs[ToTab].Bag.IsValid())
+	{
+		return SwapBagOnTab(ToTab, FromTab, FromSlot);
+	}
+
+	SourceTab.Slots[FromSlot] = FEOBItemInstance(); // 先清空原格，再装包
+	EquipBagToTab(Bag, ToTab);
+	UE_LOG(LogTemp, Log, TEXT("[背包] 已把 %s 装进第 %d 个栏位"),
+	       *Bag.Definition->ItemName.ToString(), ToTab + 1);
+	return true;
+}
+
+bool UEOB_InventoryComponent::SwapTabs(int32 TabA, int32 TabB)
+{
+	if (!IsValidTab(TabA) || !IsValidTab(TabB) || TabA == TabB) return false;
+	if (!Tabs[TabA].Bag.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[背包] 第 %d 个栏位没有背包，没法交换位置。"), TabA + 1);
+		return false;
+	}
+
+	// 只交换"背包 + 包内物品"；偏好（Preference）是页的属性，留在原地不动
+	Swap(Tabs[TabA].Bag, Tabs[TabB].Bag);
+	Swap(Tabs[TabA].Slots, Tabs[TabB].Slots);
+
+	OnInventoryChanged.Broadcast();
+	UE_LOG(LogTemp, Log, TEXT("[背包] 第 %d 个栏位和第 %d 个栏位的背包互换了位置"), TabA + 1, TabB + 1);
+	return true;
+}
+
+bool UEOB_InventoryComponent::UnequipBagToSlot(int32 BagTab, int32 ToTab, int32 ToSlot)
+{
+	if (!IsValidTab(BagTab) || !IsTabActive(ToTab)) return false;
+	FEOBInventoryTab& Source = Tabs[BagTab];
+	if (!Source.Bag.IsValid()) return false;
+
+	// 只有包内物品全部清空才能卸
+	for (const FEOBItemInstance& SlotItem : Source.Slots)
+	{
+		if (SlotItem.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[背包] 第 %d 个栏位的背包里还有物品，清空后才能卸下！"), BagTab + 1);
+			return false;
+		}
+	}
+
+	FEOBInventoryTab& Target = Tabs[ToTab];
+	if (!Target.Slots.IsValidIndex(ToSlot)) return false;
+	if (Target.Slots[ToSlot].IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[背包] 目标格子已有物品，卸下的背包只能放到空格。"));
+		return false;
+	}
+
+	Target.Slots[ToSlot] = Source.Bag;
+	Source.Bag = FEOBItemInstance();
+	Source.Slots.Empty();
+
+	OnInventoryChanged.Broadcast();
+	UE_LOG(LogTemp, Log, TEXT("[背包] 已把第 %d 个栏位的背包卸到第 %d 页第 %d 格"),
+	       BagTab + 1, ToTab + 1, ToSlot + 1);
+	return true;
+}
+
 bool UEOB_InventoryComponent::UnequipBag(int32 TabIndex)
 {
 	if (!IsValidTab(TabIndex)) return false;
@@ -299,6 +380,13 @@ int32 UEOB_InventoryComponent::GetTabCapacity(int32 TabIndex) const
 {
 	if (!IsTabActive(TabIndex)) return 0;
 	return Tabs[TabIndex].Slots.Num();
+}
+
+bool UEOB_InventoryComponent::GetTabBag(int32 TabIndex, FEOBItemInstance& OutBag) const
+{
+	if (!IsValidTab(TabIndex)) return false;
+	OutBag = Tabs[TabIndex].Bag;
+	return Tabs[TabIndex].Bag.IsValid();
 }
 
 bool UEOB_InventoryComponent::GetItemAt(int32 TabIndex, int32 SlotInTab, FEOBItemInstance& OutItem) const
@@ -369,7 +457,8 @@ AEOB_PickupBase* UEOB_InventoryComponent::DropItemToWorld(int32 TabIndex, int32 
 {
 	if (!DropPickupClass)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[背包] DropPickupClass 未配置！请到主角蓝图的 InventoryComponent 默认值里指定一个装备拾取物类（如 BP_Pickup_Sword）。"));
+		UE_LOG(LogTemp, Error,
+		       TEXT("[背包] DropPickupClass 未配置！请到主角蓝图的 InventoryComponent 默认值里指定一个装备拾取物类（如 BP_Pickup_Sword）。"));
 		return nullptr;
 	}
 	if (!IsTabActive(TabIndex)) return nullptr;
@@ -405,7 +494,7 @@ AEOB_PickupBase* UEOB_InventoryComponent::DropItemToWorld(int32 TabIndex, int32 
 	if (!Pickup) return nullptr;
 
 	Pickup->SetDroppedItemDefinition(Item.Definition); // 套用 DA 外观（网格/旋转/缩放/落地）
-	Pickup->SetPresetInstance(Item);                   // 记住已掷出的品质 + 词缀，再捡起不重新掷
+	Pickup->SetPresetInstance(Item); // 记住已掷出的品质 + 词缀，再捡起不重新掷
 
 	RemoveItemAt(TabIndex, SlotInTab);
 	UE_LOG(LogTemp, Log, TEXT("[背包] 已把 %s 丢到地上"), *Item.Definition->ItemName.ToString());

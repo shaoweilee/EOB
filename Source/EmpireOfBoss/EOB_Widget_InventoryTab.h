@@ -10,15 +10,18 @@ class UImage;
 class UVerticalBox;
 class UEOB_InventoryComponent;
 class UEOB_Widget_Inventory;
+class UEOB_Widget_InventorySlot;
 class UEOB_Widget_PreferenceOption;
 
 /**
- * 背包标签栏上的单个页签：
- *  - Button_Tab + Image_PrefIcon：显示该页"偏好"分类的图标，点击切换到该页（未激活的页禁用置灰）
- *  - Button_Arrow：点开/收起"偏好"下拉面板（Panel_Dropdown，里面是 10 行图标+文字选项）
- * 蓝图里必须包含三个同名控件：Button_Tab、Image_PrefIcon、Button_Arrow；
- * 可选控件（不配就没有下拉功能）：Panel_Dropdown（默认 Collapsed 的下拉面板）、VerticalBox_Options（选项容器）。
- * 下拉面板画在页签 110×56 之外没关系，UMG 默认不裁剪，能正常显示和点击。
+ * 背包标签栏上的单个页签，一行 = [Slot_Bag 包裹栏位] + [Button_Tab 页签按钮]：
+ *  - Slot_Bag（可选绑定，WBP_InventorySlot 实例）：显示该页装备的背包。
+ *    左键抓取/拖拽 = 两个栏位的背包互换位置；右键 = 取消装备包裹。
+ *  - Button_Tab + Image_PrefIcon：显示该页"偏好"分类的图标。
+ *    左键 = 切换到该页；右键 = 展开/收起"偏好"下拉面板（Panel_Dropdown，替代原来的箭头按钮）。
+ * 蓝图里必须包含两个同名控件：Button_Tab、Image_PrefIcon；
+ * 可选控件：Slot_Bag（不配就没有包裹栏位功能）、Panel_Dropdown（默认 Collapsed）、VerticalBox_Options。
+ * 下拉面板画在页签之外没关系，UMG 默认不裁剪，能正常显示和点击。
  */
 UCLASS()
 class EMPIREOFBOSS_API UEOB_Widget_InventoryTab : public UUserWidget
@@ -29,10 +32,13 @@ public:
 	/** 初始化：绑定背包组件、所属背包面板、页号（0~11） */
 	void InitTab(UEOB_InventoryComponent* Inv, UEOB_Widget_Inventory* OwnerPanel, int32 InTabIndex);
 
-	/** 刷新显示：激活状态、偏好图标、是否当前页 */
+	/** 刷新显示：激活状态、偏好图标、是否当前页、包裹栏位上的背包 */
 	void RefreshTab();
 
 	int32 GetTabIndex() const { return TabIndex; }
+
+	/** 本页签左侧的包裹栏位（没配返回 nullptr；背包面板做拖拽落点检测时用） */
+	UEOB_Widget_InventorySlot* GetBagSlotWidget() const { return Slot_Bag; }
 
 	/** 收起下拉面板（切页、打开别的页签下拉时由面板统一调用） */
 	void CloseDropdown();
@@ -43,7 +49,10 @@ public:
 protected:
 	virtual void NativeConstruct() override;
 
-	/** 页签按钮（点击 = 切换页） */
+	/** 右键单击走这里（Button_Tab 只响应左键，右键冒泡到本控件）= 展开/收起下拉面板 */
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+	/** 页签按钮（左键 = 切换页） */
 	UPROPERTY(meta = (BindWidget), BlueprintReadOnly, Category = "EOB|UI")
 	TObjectPtr<UButton> Button_Tab;
 
@@ -51,11 +60,15 @@ protected:
 	UPROPERTY(meta = (BindWidget), BlueprintReadOnly, Category = "EOB|UI")
 	TObjectPtr<UImage> Image_PrefIcon;
 
-	/** 箭头按钮（点击 = 展开/收起偏好下拉面板） */
-	UPROPERTY(meta = (BindWidget), BlueprintReadOnly, Category = "EOB|UI")
-	TObjectPtr<UButton> Button_Arrow;
+	/** 包裹栏位（可选绑定：放一个 WBP_InventorySlot 实例、命名 Slot_Bag。显示该页装备的背包） */
+	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "EOB|UI")
+	TObjectPtr<UEOB_Widget_InventorySlot> Slot_Bag;
 
-	/** 下拉面板（默认设 Collapsed；点箭头时展开）。可以是任意容器控件，画在页签外面也行 */
+	/** 包裹栏位的边长（像素），只影响本实例，不影响 WBP_InventorySlot 皮肤本身 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|UI")
+	float BagSlotSize = 67.f;
+
+	/** 下拉面板（默认设 Collapsed；右键页签时展开）。可以是任意容器控件，画在页签外面也行 */
 	UPROPERTY(meta = (BindWidgetOptional), BlueprintReadOnly, Category = "EOB|UI")
 	TObjectPtr<UWidget> Panel_Dropdown;
 
@@ -73,9 +86,6 @@ protected:
 
 	UFUNCTION()
 	void OnTabClicked();
-
-	UFUNCTION()
-	void OnArrowClicked();
 
 	/** 展开/收起下拉面板 */
 	void ToggleDropdown();

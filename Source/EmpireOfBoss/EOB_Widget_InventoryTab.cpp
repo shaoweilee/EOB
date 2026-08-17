@@ -4,6 +4,7 @@
 #include "Components/VerticalBox.h"
 #include "EOB_InventoryComponent.h"
 #include "EOB_Widget_Inventory.h"
+#include "EOB_Widget_InventorySlot.h"
 #include "EOB_Widget_PreferenceOption.h"
 
 namespace EOBTabUI
@@ -23,11 +24,6 @@ void UEOB_Widget_InventoryTab::NativeConstruct()
 	if (Button_Tab)
 	{
 		Button_Tab->OnClicked.AddDynamic(this, &UEOB_Widget_InventoryTab::OnTabClicked);
-	}
-
-	if (Button_Arrow)
-	{
-		Button_Arrow->OnClicked.AddDynamic(this, &UEOB_Widget_InventoryTab::OnArrowClicked);
 	}
 
 	// 下拉面板默认收起，并往里填 10 行"图标+文字"选项
@@ -58,6 +54,14 @@ void UEOB_Widget_InventoryTab::InitTab(UEOB_InventoryComponent* Inv, UEOB_Widget
 	RefInventory = Inv;
 	RefPanel = OwnerPanel;
 	TabIndex = InTabIndex;
+
+	// 包裹栏位：绑定数据 + 定尺寸（只影响本实例，不影响 WBP_InventorySlot 皮肤）
+	if (Slot_Bag)
+	{
+		Slot_Bag->InitBagSlot(Inv, TabIndex, OwnerPanel);
+		Slot_Bag->SetSlotDesiredSize(BagSlotSize);
+	}
+
 	RefreshTab();
 }
 
@@ -96,15 +100,42 @@ void UEOB_Widget_InventoryTab::RefreshTab()
 		}
 	}
 
-	// 未激活（没装背包）的页：两个按钮都禁用
+	// 包裹栏位：显示该页装备的背包（没装包就显示空格）
+	if (Slot_Bag)
+	{
+		FEOBItemInstance Bag;
+		RefInventory->GetTabBag(TabIndex, Bag);
+		Slot_Bag->UpdateSlot(Bag);
+	}
+
+	// 未激活（没装背包）的页：页签按钮禁用（包裹栏位保持可点，方便以后接受拖来的背包）
 	if (Button_Tab)
 	{
 		Button_Tab->SetIsEnabled(bActive);
 	}
-	if (Button_Arrow)
+}
+
+FReply UEOB_Widget_InventoryTab::NativeOnMouseButtonDown(const FGeometry& InGeometry,
+                                                         const FPointerEvent& InMouseEvent)
+{
+	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
 	{
-		Button_Arrow->SetIsEnabled(bActive);
+		// 手里拿着物品时：右键 = 放回原处（取消手持），优先级最高
+		if (RefPanel.IsValid() && RefPanel->IsHoldingItem())
+		{
+			RefPanel->CancelHeldItem();
+			return FReply::Handled();
+		}
+
+		// 右键页签 = 展开/收起"偏好"下拉面板（替代原来的箭头按钮）；未激活的页不弹
+		if (RefInventory.IsValid() && RefInventory->IsTabActive(TabIndex))
+		{
+			ToggleDropdown();
+		}
+		return FReply::Handled();
 	}
+
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
 void UEOB_Widget_InventoryTab::CloseDropdown()
@@ -135,11 +166,6 @@ void UEOB_Widget_InventoryTab::OnTabClicked()
 		// SetCurrentTab 内部会拒绝未激活的页，并顺手收起所有下拉面板
 		RefPanel->SetCurrentTab(TabIndex);
 	}
-}
-
-void UEOB_Widget_InventoryTab::OnArrowClicked()
-{
-	ToggleDropdown();
 }
 
 void UEOB_Widget_InventoryTab::ToggleDropdown()

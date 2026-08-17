@@ -150,6 +150,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
 	bool UnequipBag(int32 TabIndex);
 
+	/** 抓取/拖拽：把背包里某格的"背包物品"装备到【指定】栏位（栏位已有包则自动走 SwapBagOnTab 换包） */
+	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
+	bool EquipBagFromSlotToTab(int32 FromTab, int32 FromSlot, int32 ToTab);
+
+	/** 抓取/拖拽：交换两个栏位上装备的背包（连带包内物品；偏好跟随"页"不动；目标为空栏位 = 挪过去） */
+	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
+	bool SwapTabs(int32 TabA, int32 TabB);
+
+	/** 抓取/拖拽：把某栏位的背包卸下，放进【指定】物品格（包内必须先清空；目标格必须为空） */
+	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
+	bool UnequipBagToSlot(int32 BagTab, int32 ToTab, int32 ToSlot);
+
 	// ===================== 标签页查询 =====================
 
 	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
@@ -165,6 +177,10 @@ public:
 	/** 该栏位的容量（未激活为 0） */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "EOB|Inventory")
 	int32 GetTabCapacity(int32 TabIndex) const;
+
+	/** 查询某栏位上装备的背包物品（未装备时 OutBag 为无效实例、返回 false） */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "EOB|Inventory")
+	bool GetTabBag(int32 TabIndex, FEOBItemInstance& OutBag) const;
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "EOB|Inventory")
 	bool GetItemAt(int32 TabIndex, int32 SlotInTab, FEOBItemInstance& OutItem) const;
