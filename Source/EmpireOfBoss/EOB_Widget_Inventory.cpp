@@ -2,13 +2,12 @@
 #include "Components/UniformGridPanel.h"
 #include "Components/VerticalBox.h"
 #include "Components/CanvasPanelSlot.h"
-#include "Components/Image.h"
-#include "Blueprint/WidgetTree.h"
 #include "Framework/Application/SlateApplication.h"
 #include "EOB_InventoryComponent.h"
 #include "EOB_ItemDefinition.h"
 #include "EOB_Widget_InventorySlot.h"
 #include "EOB_Widget_InventoryTab.h"
+#include "EOB_Widget_HeldItemIcon.h"
 #include "EmpireOfBossCharacter.h"
 
 void UEOB_Widget_Inventory::NativeConstruct()
@@ -96,16 +95,12 @@ void UEOB_Widget_Inventory::NativeConstruct()
 		       ));
 	}
 
-	// ── 手持物品图标：纯 C++ 运行时创建，无需任何蓝图素材 ──
-	// 加到视口最高层，跟着鼠标走；不可命中测试，绝不挡点击。
-	HeldIconWidget = CreateWidget<UUserWidget>(GetOwningPlayer());
-	if (HeldIconWidget && HeldIconWidget->WidgetTree)
+	// ── 手持物品图标：运行时创建专门的 C++ 控件（自带 Image 根 + 跟随鼠标） ──
+	// 注意：不能直接 CreateWidget<UUserWidget>——UserWidget 是抽象基类，引擎禁止直接构造。
+	HeldIcon = CreateWidget<UEOB_Widget_HeldItemIcon>(GetOwningPlayer(), UEOB_Widget_HeldItemIcon::StaticClass());
+	if (HeldIcon)
 	{
-		HeldIconImage = NewObject<UImage>(HeldIconWidget->WidgetTree);
-		HeldIconWidget->WidgetTree->RootWidget = HeldIconImage;
-		HeldIconWidget->AddToViewport(1000);
-		HeldIconWidget->SetAlignmentInViewport(FVector2D(0.5f, 0.5f)); // 图标中心对准鼠标
-		HeldIconWidget->SetVisibility(ESlateVisibility::Collapsed); // 拿起时才显示
+		HeldIcon->AddToViewport(1000); // 画在所有面板之上；默认 Collapsed，拿起时才显示
 	}
 
 	RefreshUI();
@@ -113,11 +108,10 @@ void UEOB_Widget_Inventory::NativeConstruct()
 
 void UEOB_Widget_Inventory::NativeDestruct()
 {
-	if (HeldIconWidget)
+	if (HeldIcon)
 	{
-		HeldIconWidget->RemoveFromParent();
-		HeldIconWidget = nullptr;
-		HeldIconImage = nullptr;
+		HeldIcon->RemoveFromParent();
+		HeldIcon = nullptr;
 	}
 	Super::NativeDestruct();
 }
@@ -130,19 +124,6 @@ void UEOB_Widget_Inventory::NativeTick(const FGeometry& MyGeometry, float InDelt
 
 	const bool bLeftDown = FSlateApplication::Get().GetPressedMouseButtons().Contains(EKeys::LeftMouseButton);
 	const FVector2D CursorPos = FSlateApplication::Get().GetCursorPos();
-
-	// 手持图标跟着鼠标走
-	if (HeldIconWidget && HeldIconWidget->GetVisibility() != ESlateVisibility::Collapsed)
-	{
-		if (APlayerController* PC = GetOwningPlayer())
-		{
-			float MouseX = 0.f, MouseY = 0.f;
-			if (PC->GetMousePosition(MouseX, MouseY))
-			{
-				HeldIconWidget->SetPositionInViewport(FVector2D(MouseX, MouseY));
-			}
-		}
-	}
 
 	// 按下后位移超过阈值：进入拖拽；手上还没东西就从起点格子拿起来
 	if (PotentialDragSlot.IsValid() && bLeftDown && !bDragging
@@ -497,11 +478,10 @@ UEOB_Widget_InventorySlot* UEOB_Widget_Inventory::FindSlotAtScreenPosition(const
 
 void UEOB_Widget_Inventory::BeginHeldIcon(UTexture2D* Icon)
 {
-	if (!HeldIconWidget || !HeldIconImage) return;
-
-	HeldIconImage->SetBrushFromTexture(Icon);
-	HeldIconImage->SetDesiredSizeOverride(FVector2D(HeldIconSize, HeldIconSize));
-	HeldIconWidget->SetVisibility(ESlateVisibility::HitTestInvisible); // 显示但不挡点击
+	if (HeldIcon)
+	{
+		HeldIcon->ShowIcon(Icon, HeldIconSize);
+	}
 }
 
 void UEOB_Widget_Inventory::ClearHeldItem(bool bRestoreSourceVisual)
@@ -527,8 +507,8 @@ void UEOB_Widget_Inventory::ClearHeldItem(bool bRestoreSourceVisual)
 	HeldSlot = INDEX_NONE;
 	HeldGhostSlot = nullptr;
 
-	if (HeldIconWidget)
+	if (HeldIcon)
 	{
-		HeldIconWidget->SetVisibility(ESlateVisibility::Collapsed);
+		HeldIcon->HideIcon();
 	}
 }

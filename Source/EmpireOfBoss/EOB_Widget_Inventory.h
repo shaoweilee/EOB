@@ -6,11 +6,11 @@
 
 class UUniformGridPanel;
 class UVerticalBox;
-class UImage;
 class UTexture2D;
 class UEOB_InventoryComponent;
 class UEOB_Widget_InventorySlot;
 class UEOB_Widget_InventoryTab;
+class UEOB_Widget_HeldItemIcon;
 
 /**
  * 背包面板：左右两列页签（各 6 个）+ 当前页格子（格子数 = 该页背包容量）。
@@ -136,7 +136,7 @@ private:
 	/** 找屏幕坐标下的格子（12 个包裹栏位 + 当前页物品格），找不到返回 nullptr */
 	UEOB_Widget_InventorySlot* FindSlotAtScreenPosition(const FVector2D& ScreenPos) const;
 
-	/** 显示手持图标（AddToViewport 高层级，不挡点击） */
+	/** 显示手持图标 */
 	void BeginHeldIcon(UTexture2D* Icon);
 
 	/** 清空手持状态；bRestoreSourceVisual = 把源格显示还原（取消/放回原处时用） */
@@ -154,10 +154,7 @@ private:
 	FVector2D PotentialDragPos = FVector2D::ZeroVector;
 	bool bDragging = false;
 
-	/** 手持图标（运行时纯 C++ 创建，无需蓝图素材） */
+	/** 手持图标（运行时创建的纯 C++ 控件，自带跟随鼠标逻辑） */
 	UPROPERTY()
-	TObjectPtr<UUserWidget> HeldIconWidget;
-
-	UPROPERTY()
-	TObjectPtr<UImage> HeldIconImage;
+	TObjectPtr<UEOB_Widget_HeldItemIcon> HeldIcon;
 };
