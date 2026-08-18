@@ -33,12 +33,12 @@ enum class EEOBSlotWidgetMode : uint8
  * 本控件把 Image_frame 整框染红；恢复时用缓存的 LastItem 重染品质色，蓝图零改动。
  * 所有格子实例在构造时登记进全局列表（GetAllSlotWidgets），因此装备面板的格子也能被红框覆盖到。
  *
- * 交互约定（抓取 = 原地点击拿起/放下；拖拽 = 按住移动超过 8px 后松开；任何时候右键 = 取消手持）：
- *  - 背包格：左键拿起/放下；拿起背包物品点到包裹栏位 = 装备/换包；拖出面板 = 丢到地上；
- *    右键单击（手上没东西时）：装备穿到默认槽位，背包物品装到第一个空包裹栏位
- *  - 包裹栏位：左键拿起/放下（两个栏位间 = 背包互换位置，空栏位 = 挪过去）；
- *    右键单击（手上没东西时）= 取消装备包裹（包内有物品会被组件拒绝）
- *  - 装备格：左键 = 卸下（过渡方案，装备面板的抓取在下一阶段做）
+ * 交互约定（抓取 = 原地点击拿起/放下；拖拽 = 按住移动超过阈值后松开；任何时候右键 = 取消手持）：
+ *  - 三种模式的左键按下都在预览阶段被吞掉（Button 不捕获鼠标，跟手图标才有实时鼠标坐标），
+ *    "原地点击"由背包面板 Tick 在松开时补发：拿起 / 放下 / 交换
+ *  - 背包格：右键单击（手上没东西时）= 装备穿到默认槽位 / 背包物品装到第一个空包裹栏位
+ *  - 包裹栏位：右键单击（手上没东西时）= 取消装备包裹（包内有物品会被组件拒绝）
+ *  - 装备格：拿起 = 真正脱下（属性立即刷新），放下规则全部由背包面板结算
  */
 UCLASS()
 class EMPIREOFBOSS_API UEOB_Widget_InventorySlot : public UUserWidget
@@ -50,8 +50,9 @@ public:
 	void InitInventorySlot(UEOB_InventoryComponent* Inv, int32 InTabIndex, int32 InSlotInTab,
 	                       UEOB_Widget_Inventory* OwnerPanel);
 
-	/** 装备格初始化（装备面板用，不参与抓取/拖拽） */
-	void InitEquipmentSlot(UEOB_InventoryComponent* Inv, EEOBEquipSlot InEquipSlot);
+	/** 装备格初始化：记录槽位身份 + 手势总管（背包面板；装备格的抓取/拖拽同样由它统一结算） */
+	void InitEquipmentSlot(UEOB_InventoryComponent* Inv, EEOBEquipSlot InEquipSlot,
+	                       UEOB_Widget_Inventory* OwnerPanel);
 
 	/** 包裹栏位初始化：记录所属标签页 + 所属背包面板 */
 	void InitBagSlot(UEOB_InventoryComponent* Inv, int32 InTabIndex, UEOB_Widget_Inventory* OwnerPanel);
@@ -74,6 +75,7 @@ public:
 	EEOBSlotWidgetMode GetMode() const { return Mode; }
 	int32 GetTabIndex() const { return TabIndex; }
 	int32 GetSlotInTab() const { return SlotInTab; }
+	EEOBEquipSlot GetEquipSlot() const { return EquipSlot; }
 
 protected:
 	virtual void NativeConstruct() override;
@@ -82,7 +84,7 @@ protected:
 	/** 右键单击走这里（Button 只响应左键，右键会冒泡到控件自身） */
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
-	/** 左键按下的"预览"事件：先于 Button 处理到达本控件，用来登记拖拽起点 */
+	/** 左键按下的"预览"事件：先于 Button 处理到达本控件，用来登记拖拽起点并吞掉事件（防鼠标捕获） */
 	virtual FReply
 	NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
@@ -103,9 +105,6 @@ protected:
 	/** 中心径向渐变（白色辉光素材 × 品质色） */
 	UPROPERTY(meta = (BindWidget), BlueprintReadOnly, Category = "EOB|UI")
 	TObjectPtr<UImage> Image_glow;
-
-	UFUNCTION()
-	void OnSlotClicked();
 
 private:
 	EEOBSlotWidgetMode Mode = EEOBSlotWidgetMode::Inventory;

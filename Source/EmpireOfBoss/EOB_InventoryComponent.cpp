@@ -149,6 +149,163 @@ bool UEOB_InventoryComponent::UnequipItem(EEOBEquipSlot Slot)
 	return true;
 }
 
+// ===================== 装备面板抓取/拖拽原语（手持装备用） =====================
+
+bool UEOB_InventoryComponent::CanEquipToSlot(const UEOB_ItemDefinition* Def, EEOBEquipSlot PanelSlot) const
+{
+	if (!Def) return false;
+	if (Def->Kind != EEOBItemKind::Equipment) return false; // 背包不能穿到装备面板
+	return EquipSlotsMatch(Def->EquipSlot, PanelSlot);
+}
+
+bool UEOB_InventoryComponent::GetEquippedItem(EEOBEquipSlot Slot, FEOBItemInstance& OutItem) const
+{
+	if (const FEOBItemInstance* Existing = EquippedItems.Find(Slot))
+	{
+		OutItem = *Existing;
+		return true;
+	}
+	OutItem = FEOBItemInstance();
+	return false;
+}
+
+bool UEOB_InventoryComponent::UnequipSlotToInstance(EEOBEquipSlot Slot, FEOBItemInstance& OutItem)
+{
+	FEOBItemInstance* Existing = EquippedItems.Find(Slot);
+	if (!Existing) return false;
+
+	OutItem = *Existing;
+	RemoveItemEffects(OutItem); // 属性立即刷新，句柄清空
+	EquippedItems.Remove(Slot);
+
+	OnEquipmentChanged.Broadcast(); // 装备面板刷新为空槽；背包没动，不广播 OnInventoryChanged
+	UE_LOG(LogTemp, Log, TEXT("[装备] 已拿起 %s（属性已移除，等待放下）"), *OutItem.Definition->ItemName.ToString());
+	return true;
+}
+
+bool UEOB_InventoryComponent::EquipInstanceToSlot(const FEOBItemInstance& Item, EEOBEquipSlot Slot,
+                                                  FEOBItemInstance& OutReplaced)
+{
+	OutReplaced = FEOBItemInstance();
+	if (!CanEquipToSlot(Item.Definition, Slot)) return false;
+
+	// 槽位有货：顶下旧装备，交还给调用方（UI 会把它抓在手里继续跟手）
+	if (FEOBItemInstance* Existing = EquippedItems.Find(Slot))
+	{
+		OutReplaced = *Existing;
+		RemoveItemEffects(OutReplaced);
+		EquippedItems.Remove(Slot);
+	}
+
+	FEOBItemInstance ToApply = Item;
+	ApplyItemEffects(ToApply);
+	EquippedItems.Add(Slot, ToApply);
+
+	OnEquipmentChanged.Broadcast();
+	UE_LOG(LogTemp, Log, TEXT("[装备] 已穿上 %s"), *Item.Definition->ItemName.ToString());
+	return true;
+}
+
+bool UEOB_InventoryComponent::EquipFromInventoryToSlot(int32 TabIndex, int32 SlotInTab, EEOBEquipSlot PanelSlot)
+{
+	if (!IsTabActive(TabIndex)) return false;
+	FEOBInventoryTab& Tab = Tabs[TabIndex];
+	if (!Tab.Slots.IsValidIndex(SlotInTab) || !Tab.Slots[SlotInTab].IsValid()) return false;
+
+	const FEOBItemInstance ItemToEquip = Tab.Slots[SlotInTab];
+	if (!CanEquipToSlot(ItemToEquip.Definition, PanelSlot))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[装备] %s 不能穿到这个槽位。"), *ItemToEquip.Definition->ItemName.ToString());
+		return false;
+	}
+
+	// 旧装备回到该背包格（设计文档：原有装备回到物品栏）；空槽则清空该格
+	if (FEOBItemInstance* Existing = EquippedItems.Find(PanelSlot))
+	{
+		FEOBItemInstance Replaced = *Existing;
+		RemoveItemEffects(Replaced);
+		EquippedItems.Remove(PanelSlot);
+		Tab.Slots[SlotInTab] = Replaced;
+	}
+	else
+	{
+		Tab.Slots[SlotInTab] = FEOBItemInstance();
+	}
+
+	FEOBItemInstance ToApply = ItemToEquip;
+	ApplyItemEffects(ToApply);
+	EquippedItems.Add(PanelSlot, ToApply);
+
+	OnInventoryChanged.Broadcast();
+	OnEquipmentChanged.Broadcast();
+	UE_LOG(LogTemp, Log, TEXT("[装备] 已把背包里的 %s 穿到指定槽位"), *ItemToEquip.Definition->ItemName.ToString());
+	return true;
+}
+
+bool UEOB_InventoryComponent::SwapEquippedWithInventorySlot(EEOBEquipSlot Slot, int32 TabIndex, int32 SlotInTab,
+                                                            const FEOBItemInstance& HeldItem,
+                                                            FEOBItemInstance& OutDisplaced)
+{
+	OutDisplaced = FEOBItemInstance();
+	if (!IsTabActive(TabIndex)) return false;
+	FEOBInventoryTab& Tab = Tabs[TabIndex];
+	if (!Tab.Slots.IsValidIndex(SlotInTab) || !Tab.Slots[SlotInTab].IsValid()) return false;
+	if (!HeldItem.IsValid()) return false;
+
+	const FEOBItemInstance GridItem = Tab.Slots[SlotInTab];
+	if (!CanEquipToSlot(GridItem.Definition, Slot)) return false; // 背包格装备必须能穿到目标槽位才互换
+
+	Tab.Slots[SlotInTab] = HeldItem; // 手持装备进背包格
+
+	// 槽位若又被别的装备占着，占用者交还给 UI 继续抓在手里（保证不吞装备）
+	if (FEOBItemInstance* Existing = EquippedItems.Find(Slot))
+	{
+		OutDisplaced = *Existing;
+		RemoveItemEffects(OutDisplaced);
+		EquippedItems.Remove(Slot);
+	}
+
+	FEOBItemInstance ToApply = GridItem;
+	ApplyItemEffects(ToApply);
+	EquippedItems.Add(Slot, ToApply);
+
+	OnInventoryChanged.Broadcast();
+	OnEquipmentChanged.Broadcast();
+	UE_LOG(LogTemp, Log, TEXT("[装备] 背包格的 %s 已穿上，手持装备放入背包格"), *GridItem.Definition->ItemName.ToString());
+	return true;
+}
+
+bool UEOB_InventoryComponent::PlaceInstanceIntoSlot(const FEOBItemInstance& Item, int32 TabIndex, int32 SlotInTab)
+{
+	if (!Item.IsValid()) return false;
+	if (!IsTabActive(TabIndex)) return false;
+	FEOBInventoryTab& Tab = Tabs[TabIndex];
+	if (!Tab.Slots.IsValidIndex(SlotInTab)) return false;
+	if (Tab.Slots[SlotInTab].IsValid()) return false; // 只放空格，有货的格子请走别的路径
+
+	Tab.Slots[SlotInTab] = Item;
+	OnInventoryChanged.Broadcast();
+	return true;
+}
+
+bool UEOB_InventoryComponent::PlaceInstanceIntoTab(const FEOBItemInstance& Item, int32 TabIndex)
+{
+	if (!Item.IsValid()) return false;
+
+	const int32 EmptySlot = FindEmptySlotInTab(TabIndex); // 页未激活也会返回 INDEX_NONE
+	if (EmptySlot == INDEX_NONE) return false;
+
+	Tabs[TabIndex].Slots[EmptySlot] = Item;
+	OnInventoryChanged.Broadcast();
+	return true;
+}
+
+AEOB_PickupBase* UEOB_InventoryComponent::DropInstanceToWorld(const FEOBItemInstance& Item)
+{
+	if (!Item.IsValid()) return nullptr;
+	return SpawnDropPickup(Item); // 物品不在任何容器里，生成完即可，无需广播
+}
+
 // ===================== 背包（物品）穿脱 =====================
 
 bool UEOB_InventoryComponent::EquipBagFromInventory(int32 TabIndex, int32 SlotInTab)
@@ -455,48 +612,15 @@ bool UEOB_InventoryComponent::MoveItemToTab(int32 FromTab, int32 FromSlot, int32
 
 AEOB_PickupBase* UEOB_InventoryComponent::DropItemToWorld(int32 TabIndex, int32 SlotInTab)
 {
-	if (!DropPickupClass)
-	{
-		UE_LOG(LogTemp, Error,
-		       TEXT("[背包] DropPickupClass 未配置！请到主角蓝图的 InventoryComponent 默认值里指定一个装备拾取物类（如 BP_Pickup_Sword）。"));
-		return nullptr;
-	}
 	if (!IsTabActive(TabIndex)) return nullptr;
 	FEOBInventoryTab& Tab = Tabs[TabIndex];
 	if (!Tab.Slots.IsValidIndex(SlotInTab) || !Tab.Slots[SlotInTab].IsValid()) return nullptr;
 
-	AActor* OwnerActor = GetOwner();
-	if (!OwnerActor) return nullptr;
-	UWorld* World = OwnerActor->GetWorld();
-	if (!World) return nullptr;
-
 	const FEOBItemInstance Item = Tab.Slots[SlotInTab];
-
-	// 落点：主人面前 80cm，向下射线找地面（和怪物掉落同一通道）
-	const FVector TraceStart = OwnerActor->GetActorLocation()
-		+ OwnerActor->GetActorForwardVector() * 80.f
-		+ FVector(0.f, 0.f, 100.f);
-	const FVector TraceEnd = TraceStart - FVector(0.f, 0.f, 600.f);
-
-	FVector SpawnLoc = TraceStart;
-	FHitResult Hit;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(OwnerActor);
-	if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_GameTraceChannel2, QueryParams))
-	{
-		SpawnLoc = Hit.ImpactPoint + FVector(0.f, 0.f, 2.f);
-	}
-
-	FActorSpawnParameters Params;
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	AEOB_PickupBase* Pickup = World->SpawnActor<AEOB_PickupBase>(
-		DropPickupClass, SpawnLoc, FRotator::ZeroRotator, Params);
+	AEOB_PickupBase* Pickup = SpawnDropPickup(Item);
 	if (!Pickup) return nullptr;
 
-	Pickup->SetDroppedItemDefinition(Item.Definition); // 套用 DA 外观（网格/旋转/缩放/落地）
-	Pickup->SetPresetInstance(Item); // 记住已掷出的品质 + 词缀，再捡起不重新掷
-
-	RemoveItemAt(TabIndex, SlotInTab);
+	RemoveItemAt(TabIndex, SlotInTab); // 内部会广播 OnInventoryChanged
 	UE_LOG(LogTemp, Log, TEXT("[背包] 已把 %s 丢到地上"), *Item.Definition->ItemName.ToString());
 	return Pickup;
 }
@@ -721,4 +845,45 @@ int32 UEOB_InventoryComponent::FindSlotForItem(const FEOBItemInstance& Item) con
 	}
 
 	return INDEX_NONE;
+}
+
+AEOB_PickupBase* UEOB_InventoryComponent::SpawnDropPickup(const FEOBItemInstance& Item)
+{
+	if (!DropPickupClass)
+	{
+		UE_LOG(LogTemp, Error,
+		       TEXT("[背包] DropPickupClass 未配置！请到主角蓝图的 InventoryComponent 默认值里指定一个装备拾取物类（如 BP_Pickup_Sword）。"));
+		return nullptr;
+	}
+	if (!Item.IsValid()) return nullptr;
+
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor) return nullptr;
+	UWorld* World = OwnerActor->GetWorld();
+	if (!World) return nullptr;
+
+	// 落点：主人面前 80cm，向下射线找地面（和怪物掉落同一通道）
+	const FVector TraceStart = OwnerActor->GetActorLocation()
+		+ OwnerActor->GetActorForwardVector() * 80.f
+		+ FVector(0.f, 0.f, 100.f);
+	const FVector TraceEnd = TraceStart - FVector(0.f, 0.f, 600.f);
+
+	FVector SpawnLoc = TraceStart;
+	FHitResult Hit;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(OwnerActor);
+	if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_GameTraceChannel2, QueryParams))
+	{
+		SpawnLoc = Hit.ImpactPoint + FVector(0.f, 0.f, 2.f);
+	}
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AEOB_PickupBase* Pickup = World->SpawnActor<AEOB_PickupBase>(
+		DropPickupClass, SpawnLoc, FRotator::ZeroRotator, Params);
+	if (!Pickup) return nullptr;
+
+	Pickup->SetDroppedItemDefinition(Item.Definition); // 套用 DA 外观（网格/旋转/缩放/落地）
+	Pickup->SetPresetInstance(Item); // 记住已掷出的品质 + 词缀，再捡起不重新掷
+	return Pickup;
 }

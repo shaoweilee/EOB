@@ -14,8 +14,8 @@ enum class EEOBRarity : uint8
 {
 	White UMETA(DisplayName = "普通(白)"),
 	Green UMETA(DisplayName = "魔法(绿)"),
-	Blue  UMETA(DisplayName = "稀有(蓝)"),
-	Gold  UMETA(DisplayName = "传说(金)")
+	Blue UMETA(DisplayName = "稀有(蓝)"),
+	Gold UMETA(DisplayName = "传说(金)")
 };
 
 /** 物品种类：装备（穿到装备面板）/ 背包（装进背包栏位 = 标签页） */
@@ -23,23 +23,23 @@ UENUM(BlueprintType)
 enum class EEOBItemKind : uint8
 {
 	Equipment UMETA(DisplayName = "装备"),
-	Bag       UMETA(DisplayName = "背包")
+	Bag UMETA(DisplayName = "背包")
 };
 
 /** 装备槽位（Ring 只用于物品定义，穿戴时自动分配左右） */
 UENUM(BlueprintType)
 enum class EEOBEquipSlot : uint8
 {
-	Weapon    UMETA(DisplayName = "武器"),
-	Shield    UMETA(DisplayName = "盾牌"),
-	Helmet    UMETA(DisplayName = "头盔"),
-	Chest     UMETA(DisplayName = "胸甲"),
-	Gloves    UMETA(DisplayName = "手套"),
-	Boots     UMETA(DisplayName = "鞋子"),
-	Belt      UMETA(DisplayName = "腰带"),
-	Amulet    UMETA(DisplayName = "项链"),
-	Ring      UMETA(DisplayName = "戒指(通用)"),
-	RingLeft  UMETA(DisplayName = "戒指(左)"),
+	Weapon UMETA(DisplayName = "武器"),
+	Shield UMETA(DisplayName = "盾牌"),
+	Helmet UMETA(DisplayName = "头盔"),
+	Chest UMETA(DisplayName = "胸甲"),
+	Gloves UMETA(DisplayName = "手套"),
+	Boots UMETA(DisplayName = "鞋子"),
+	Belt UMETA(DisplayName = "腰带"),
+	Amulet UMETA(DisplayName = "项链"),
+	Ring UMETA(DisplayName = "戒指(通用)"),
+	RingLeft UMETA(DisplayName = "戒指(左)"),
 	RingRight UMETA(DisplayName = "戒指(右)")
 };
 
@@ -48,15 +48,15 @@ UENUM(BlueprintType)
 enum class EEOBItemCategory : uint8
 {
 	Uncategorized UMETA(DisplayName = "任意"),
-	Weapon        UMETA(DisplayName = "武器"),
-	Shield        UMETA(DisplayName = "盾牌"),
-	Helmet        UMETA(DisplayName = "头盔"),
-	Chest         UMETA(DisplayName = "胸甲"),
-	Gloves        UMETA(DisplayName = "手套"),
-	Boots         UMETA(DisplayName = "鞋子"),
-	Belt          UMETA(DisplayName = "腰带"),
-	Amulet        UMETA(DisplayName = "项链"),
-	Ring          UMETA(DisplayName = "戒指")
+	Weapon UMETA(DisplayName = "武器"),
+	Shield UMETA(DisplayName = "盾牌"),
+	Helmet UMETA(DisplayName = "头盔"),
+	Chest UMETA(DisplayName = "胸甲"),
+	Gloves UMETA(DisplayName = "手套"),
+	Boots UMETA(DisplayName = "鞋子"),
+	Belt UMETA(DisplayName = "腰带"),
+	Amulet UMETA(DisplayName = "项链"),
+	Ring UMETA(DisplayName = "戒指")
 };
 
 /** 装备槽位 → 物品分类（戒指的三个槽位都归为"戒指"） */
@@ -67,16 +67,24 @@ inline EEOBItemCategory EquipSlotToCategory(EEOBEquipSlot Slot)
 	case EEOBEquipSlot::Weapon: return EEOBItemCategory::Weapon;
 	case EEOBEquipSlot::Shield: return EEOBItemCategory::Shield;
 	case EEOBEquipSlot::Helmet: return EEOBItemCategory::Helmet;
-	case EEOBEquipSlot::Chest:  return EEOBItemCategory::Chest;
+	case EEOBEquipSlot::Chest: return EEOBItemCategory::Chest;
 	case EEOBEquipSlot::Gloves: return EEOBItemCategory::Gloves;
-	case EEOBEquipSlot::Boots:  return EEOBItemCategory::Boots;
-	case EEOBEquipSlot::Belt:   return EEOBItemCategory::Belt;
+	case EEOBEquipSlot::Boots: return EEOBItemCategory::Boots;
+	case EEOBEquipSlot::Belt: return EEOBItemCategory::Belt;
 	case EEOBEquipSlot::Amulet: return EEOBItemCategory::Amulet;
 	case EEOBEquipSlot::Ring:
 	case EEOBEquipSlot::RingLeft:
 	case EEOBEquipSlot::RingRight: return EEOBItemCategory::Ring;
 	default: return EEOBItemCategory::Uncategorized;
 	}
+}
+
+/** 物品定义上的装备槽位 与 面板槽位 是否匹配（戒指定义匹配左右两个戒指槽；其余严格相等） */
+inline bool EquipSlotsMatch(EEOBEquipSlot DefinitionSlot, EEOBEquipSlot PanelSlot)
+{
+	if (DefinitionSlot == PanelSlot) return true;
+	const bool bPanelIsRingSlot = (PanelSlot == EEOBEquipSlot::RingLeft || PanelSlot == EEOBEquipSlot::RingRight);
+	return bPanelIsRingSlot && DefinitionSlot == EEOBEquipSlot::Ring;
 }
 
 /** 背包容量表：品质 = 格子数（白 8 / 绿 14 / 蓝 20 / 金 32） */
@@ -86,8 +94,8 @@ inline int32 GetBagCapacity(EEOBRarity Rarity)
 	{
 	case EEOBRarity::White: return 8;
 	case EEOBRarity::Green: return 14;
-	case EEOBRarity::Blue:  return 20;
-	case EEOBRarity::Gold:  return 32;
+	case EEOBRarity::Blue: return 20;
+	case EEOBRarity::Gold: return 32;
 	default: return 8;
 	}
 }

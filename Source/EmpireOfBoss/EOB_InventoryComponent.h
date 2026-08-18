@@ -132,6 +132,58 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
 	bool UnequipItem(EEOBEquipSlot Slot);
 
+	// ===================== 装备面板抓取/拖拽原语（手持装备用） =====================
+	// 设计文档：从装备面板"拿起" = 真正脱下（属性立即刷新），实例由 UI 面板持有；
+	// 放下时按落点调用下面的原语之一。除注明外，这些函数都不动背包格子。
+
+	/** 该定义能否穿到指定面板槽位（戒指定义匹配左右戒指槽；背包物品恒 false） */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "EOB|Inventory")
+	bool CanEquipToSlot(const UEOB_ItemDefinition* Def, EEOBEquipSlot PanelSlot) const;
+
+	/** 查询某槽位上穿戴的装备（空槽返回 false，OutItem 为无效实例） */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "EOB|Inventory")
+	bool GetEquippedItem(EEOBEquipSlot Slot, FEOBItemInstance& OutItem) const;
+
+	/** 【拿起】真正卸下：移属性、移出装备表，实例经 OutItem 交给 UI 持有（不进背包！）。仅广播 OnEquipmentChanged */
+	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
+	bool UnequipSlotToInstance(EEOBEquipSlot Slot, FEOBItemInstance& OutItem);
+
+	/**
+	 * 【放下】把裸实例穿到指定槽位（内部会复核 CanEquipToSlot）。
+	 * 槽位有货则旧装备被顶下、经 OutReplaced 返回（无效 = 槽位本来是空的），由 UI 决定它的去向（抓在手里）。
+	 * 仅广播 OnEquipmentChanged
+	 */
+	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
+	bool EquipInstanceToSlot(const FEOBItemInstance& Item, EEOBEquipSlot Slot, FEOBItemInstance& OutReplaced);
+
+	/**
+	 * 【放下】背包格里的装备穿到指定面板槽位（手持背包装备点/拖到装备槽）。
+	 * 旧装备回到该背包格（设计文档：原有装备回到物品栏）；背包物品/不匹配直接失败。
+	 */
+	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
+	bool EquipFromInventoryToSlot(int32 TabIndex, int32 SlotInTab, EEOBEquipSlot PanelSlot);
+
+	/**
+	 * 【放下】手持装备与背包格里的装备互换：背包格装备穿到 Slot（= 手持装备的原始槽位），手持装备进背包格。
+	 * 仅当背包格装备能穿到 Slot 时才成立；
+	 * Slot 若又被别的装备占着，占用者经 OutDisplaced 返回（UI 继续抓在手里，保证不吞装备）。
+	 */
+	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
+	bool SwapEquippedWithInventorySlot(EEOBEquipSlot Slot, int32 TabIndex, int32 SlotInTab,
+	                                   const FEOBItemInstance& HeldItem, FEOBItemInstance& OutDisplaced);
+
+	/** 【放下】把裸实例放进指定页的指定格（目标格必须为空；页未激活/格有货返回 false）。仅广播 OnInventoryChanged */
+	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
+	bool PlaceInstanceIntoSlot(const FEOBItemInstance& Item, int32 TabIndex, int32 SlotInTab);
+
+	/** 【放下】把裸实例放进指定页的第一个空格（点标签按钮；页满/未激活返回 false）。仅广播 OnInventoryChanged */
+	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
+	bool PlaceInstanceIntoTab(const FEOBItemInstance& Item, int32 TabIndex);
+
+	/** 【放下】把裸实例丢到主人脚边的地上（手持装备丢到面板外空地；不广播，物品本来不在任何容器里） */
+	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
+	AEOB_PickupBase* DropInstanceToWorld(const FEOBItemInstance& Item);
+
 	// ===================== 背包（物品）穿脱 =====================
 
 	/** 把背包里某格的"背包物品"装备到第一个空栏位（右键单击背包） */
@@ -232,6 +284,9 @@ private:
 
 	/** 归位规则：偏好该分类的已激活页 → "任意"偏好的已激活页 → 任意有空位的已激活页，返回 页号×64+页内格号 */
 	int32 FindSlotForItem(const FEOBItemInstance& Item) const;
+
+	/** 丢弃共用的生成逻辑：在主人脚边生成拾取物并写入实例（不移除任何容器里的物品，也不广播） */
+	AEOB_PickupBase* SpawnDropPickup(const FEOBItemInstance& Item);
 
 	bool IsValidTab(int32 TabIndex) const { return TabIndex >= 0 && TabIndex < NumTabs; }
 };

@@ -9,7 +9,7 @@
 
 namespace EOBSlotWidgetRegistry
 {
-	/** 全局格子注册表：背包/包裹栏位/装备面板的格子都在里面，供面板做"禁止投放"红框检测 */
+	/** 全局格子注册表：背包/包裹栏位/装备面板的格子都在里面，供面板做"禁止投放"红框检测和落点查找 */
 	TArray<TWeakObjectPtr<UEOB_Widget_InventorySlot>> GAllSlotWidgets;
 }
 
@@ -22,13 +22,9 @@ void UEOB_Widget_InventorySlot::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// C++ 自动绑定左键点击，蓝图不用再连 OnClicked。
-	// 注意：背包格/包裹栏位的左键按下已在预览阶段被吞掉（见 NativeOnPreviewMouseButtonDown），
-	// Button 收不到按下、OnClicked 不会触发——这条绑定现在只服务装备格（点击卸下，过渡方案）。
-	if (Button)
-	{
-		Button->OnClicked.AddDynamic(this, &UEOB_Widget_InventorySlot::OnSlotClicked);
-	}
+	// 注意：Button 的 OnClicked 不再绑定任何东西——三种模式的左键按下都在预览阶段被吞掉
+	// （见 NativeOnPreviewMouseButtonDown），Button 收不到按下、OnClicked 不会触发。
+	// "原地点击"语义由背包面板 Tick 在松开时补发，功能不变。
 
 	// 登记进全局列表（网格每帧重建也没关系，弱引用 + 析构注销 + 面板侧顺手清理）
 	EOBSlotWidgetRegistry::GAllSlotWidgets.AddUnique(this);
@@ -55,10 +51,12 @@ void UEOB_Widget_InventorySlot::InitInventorySlot(UEOB_InventoryComponent* Inv, 
 	SlotInTab = InSlotInTab;
 }
 
-void UEOB_Widget_InventorySlot::InitEquipmentSlot(UEOB_InventoryComponent* Inv, EEOBEquipSlot InEquipSlot)
+void UEOB_Widget_InventorySlot::InitEquipmentSlot(UEOB_InventoryComponent* Inv, EEOBEquipSlot InEquipSlot,
+                                                  UEOB_Widget_Inventory* OwnerPanel)
 {
 	Mode = EEOBSlotWidgetMode::Equipment;
 	RefInventory = Inv;
+	RefPanel = OwnerPanel;
 	EquipSlot = InEquipSlot;
 }
 
@@ -130,33 +128,26 @@ void UEOB_Widget_InventorySlot::SetForbiddenHighlight(bool bOn)
 	UpdateSlot(LastItem);
 }
 
-void UEOB_Widget_InventorySlot::OnSlotClicked()
-{
-	if (!RefInventory.IsValid()) return;
-
-	// 装备格：手上拿着东西时不动作；否则保留"点击卸下"作为过渡（装备面板抓取在下一阶段做）。
-	// 背包格/包裹栏位的左键已在预览阶段被吞掉，Button 不会触发 OnClicked，走不到这里。
-	if (Mode == EEOBSlotWidgetMode::Equipment)
-	{
-		if (RefPanel.IsValid() && RefPanel->IsHoldingItem()) return;
-		RefInventory->UnequipItem(EquipSlot);
-		return;
-	}
-}
-
 FReply UEOB_Widget_InventorySlot::NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry,
                                                                  const FPointerEvent& InMouseEvent)
 {
-	// 左键按下（背包格/包裹栏位）：登记拖拽起点，并【直接吞掉事件】——
+	// 左键按下（三种模式全部）：登记拖拽起点，并【直接吞掉事件】——
 	// 不让 Button 收到这次按下，Slate 就不会捕获鼠标，
 	// PC->GetMousePosition 在拖拽全程保持实时（跟手图标就靠这个唯一真值源，零坐标换算）。
 	// 原地松开的"点击"语义由面板 Tick 在松开时补发 OnSlotGrabClicked，功能不变。
-	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton
-		&& RefPanel.IsValid()
-		&& Mode != EEOBSlotWidgetMode::Equipment)
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
-		RefPanel->NotifySlotLeftPressed(this, InMouseEvent.GetScreenSpacePosition());
-		return FReply::Handled();
+		// 装备面板的格子可能先于背包面板构造，那时拿不到面板引用；按下的瞬间现场补取一次
+		if (!RefPanel.IsValid())
+		{
+			RefPanel = UEOB_Widget_Inventory::GetInstance();
+		}
+
+		if (RefPanel.IsValid())
+		{
+			RefPanel->NotifySlotLeftPressed(this, InMouseEvent.GetScreenSpacePosition());
+			return FReply::Handled();
+		}
 	}
 
 	return Super::NativeOnPreviewMouseButtonDown(InGeometry, InMouseEvent);
@@ -167,7 +158,12 @@ FReply UEOB_Widget_InventorySlot::NativeOnMouseButtonDown(const FGeometry& InGeo
 {
 	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton && RefInventory.IsValid())
 	{
-		// 手里拿着东西时：任何右键 = 放回原处（取消手持），优先级最高
+		if (!RefPanel.IsValid())
+		{
+			RefPanel = UEOB_Widget_Inventory::GetInstance();
+		}
+
+		// 手里拿着东西时：任何右键 = 放回原处（取消手持；装备来源 = 穿回原始槽位），优先级最高
 		if (RefPanel.IsValid() && RefPanel->IsHoldingItem())
 		{
 			RefPanel->CancelHeldItem();
@@ -200,6 +196,12 @@ FReply UEOB_Widget_InventorySlot::NativeOnMouseButtonDown(const FGeometry& InGeo
 				RefInventory->UnequipBag(TabIndex);
 			}
 			// 空栏位也吞掉右键，免得冒泡给页签把"偏好"下拉面弹出来
+			return FReply::Handled();
+		}
+
+		// 装备格：空手右键不做事（卸下请用左键抓取），吞掉事件防止冒泡
+		if (Mode == EEOBSlotWidgetMode::Equipment)
+		{
 			return FReply::Handled();
 		}
 	}
