@@ -8,6 +8,18 @@
 #include "TimerManager.h"
 #include "EOB_Widget_SkillTree.h"
 
+namespace EOBHudZOrder
+{
+	/**
+	 * 可开合面板（背包/装备/角色/技能树）的视口层级。
+	 * 必须压过 HUD 本体（默认 0 层）里的常驻控件（动作条/小地图等）——
+	 * 否则像"页签偏好下拉框"这种伸出面板边框的部分，会被动作条之类的 WBP 挡住、点不到。
+	 * 手持图标（1000 层）仍在最上、点击层（-100 层）仍在最下，互不影响；
+	 * 四个面板之间层级相同，相互遮挡关系与原来一致。
+	 */
+	static constexpr int32 ToggleablePanel = 10;
+}
+
 void UEOB_HUDWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -18,7 +30,7 @@ void UEOB_HUDWidget::NativeConstruct()
 		InventoryPanel = CreateWidget<UEOB_Widget_Inventory>(this, InventoryPanelClass);
 		if (InventoryPanel)
 		{
-			InventoryPanel->AddToViewport();
+			InventoryPanel->AddToViewport(EOBHudZOrder::ToggleablePanel);
 			InventoryPanel->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
@@ -28,7 +40,7 @@ void UEOB_HUDWidget::NativeConstruct()
 		EquipmentPanel = CreateWidget<UEOB_Widget_EquipmentPanel>(this, EquipmentPanelClass);
 		if (EquipmentPanel)
 		{
-			EquipmentPanel->AddToViewport();
+			EquipmentPanel->AddToViewport(EOBHudZOrder::ToggleablePanel);
 			EquipmentPanel->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
@@ -38,7 +50,7 @@ void UEOB_HUDWidget::NativeConstruct()
 		CharacterPanel = CreateWidget<UEOB_Widget_CharacterPanel>(this, CharacterPanelClass);
 		if (CharacterPanel)
 		{
-			CharacterPanel->AddToViewport();
+			CharacterPanel->AddToViewport(EOBHudZOrder::ToggleablePanel);
 			CharacterPanel->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
@@ -54,7 +66,7 @@ void UEOB_HUDWidget::NativeConstruct()
 		SkillTreePanel = CreateWidget<UEOB_Widget_SkillTree>(this, SkillTreePanelClass);
 		if (SkillTreePanel)
 		{
-			SkillTreePanel->AddToViewport();
+			SkillTreePanel->AddToViewport(EOBHudZOrder::ToggleablePanel);
 			SkillTreePanel->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
