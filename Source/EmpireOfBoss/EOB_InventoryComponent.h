@@ -210,13 +210,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
 	bool EquipBagFromSlotToTab(int32 FromTab, int32 FromSlot, int32 ToTab);
 
-	/** 抓取/拖拽：交换两个栏位上装备的背包（连带包内物品；偏好跟随"页"不动；目标为空栏位 = 挪过去） */
+	/** 抓取/拖拽：交换两个栏位上装备的背包（连带包内物品，偏好也跟着背包一起换；目标为空栏位 = 挪过去） */
 	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
 	bool SwapTabs(int32 TabA, int32 TabB);
 
 	/** 抓取/拖拽：把某栏位的背包卸下，放进【指定】物品格（包内必须先清空；目标格必须为空） */
 	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
 	bool UnequipBagToSlot(int32 BagTab, int32 ToTab, int32 ToSlot);
+
+	/** 抓取/拖拽：把某栏位的背包卸下，放进【指定页】的第一个空格（包内必须先清空；目标页必须已激活且有空位） */
+	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
+	bool UnequipBagToTab(int32 BagTab, int32 ToTab);
 
 	// ===================== 标签页查询 =====================
 

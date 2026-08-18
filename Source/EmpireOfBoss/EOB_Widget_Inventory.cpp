@@ -679,9 +679,11 @@ void UEOB_Widget_Inventory::PlaceHeldOnTab(int32 TabIndex, bool bFromDrag)
 	}
 	else if (HeldSource == EEOBHeldSourceType::BagSlot)
 	{
+		// 放在页签按钮/偏好图标上 = 卸下背包放进该页背包的第一个空格（条件复用卸下规则：包内已清空 + 目标页有空位）。
+		// 想互换两个栏位的背包位置请放到对方的包裹栏位格子上（SwapTabs）。
 		if (TabIndex != HeldTab)
 		{
-			bPlaced = RefInventory->SwapTabs(HeldTab, TabIndex);
+			bPlaced = RefInventory->UnequipBagToTab(HeldTab, TabIndex);
 		}
 	}
 	else if (HeldSource == EEOBHeldSourceType::EquipmentSlot)

@@ -469,9 +469,10 @@ bool UEOB_InventoryComponent::SwapTabs(int32 TabA, int32 TabB)
 		return false;
 	}
 
-	// 只交换"背包 + 包内物品"；偏好（Preference）是页的属性，留在原地不动
+	// 交换"背包 + 包内物品 + 偏好"：偏好跟随背包走（两个已装备的背包互换时，偏好也一起换）
 	Swap(Tabs[TabA].Bag, Tabs[TabB].Bag);
 	Swap(Tabs[TabA].Slots, Tabs[TabB].Slots);
+	Swap(Tabs[TabA].Preference, Tabs[TabB].Preference);
 
 	OnInventoryChanged.Broadcast();
 	UE_LOG(LogTemp, Log, TEXT("[背包] 第 %d 个栏位和第 %d 个栏位的背包互换了位置"), TabA + 1, TabB + 1);
@@ -509,6 +510,42 @@ bool UEOB_InventoryComponent::UnequipBagToSlot(int32 BagTab, int32 ToTab, int32 
 	OnInventoryChanged.Broadcast();
 	UE_LOG(LogTemp, Log, TEXT("[背包] 已把第 %d 个栏位的背包卸到第 %d 页第 %d 格"),
 	       BagTab + 1, ToTab + 1, ToSlot + 1);
+	return true;
+}
+
+bool UEOB_InventoryComponent::UnequipBagToTab(int32 BagTab, int32 ToTab)
+{
+	if (!IsValidTab(BagTab) || BagTab == ToTab) return false;
+	if (!IsTabActive(ToTab)) return false; // 目标页没背包，谈不上"放进它的背包里"
+	FEOBInventoryTab& Source = Tabs[BagTab];
+	if (!Source.Bag.IsValid()) return false;
+
+	// 只有包内物品全部清空才能卸（与 UnequipBag 同一条规则）
+	for (const FEOBItemInstance& SlotItem : Source.Slots)
+	{
+		if (SlotItem.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[背包] 第 %d 个栏位的背包里还有物品，清空后才能卸下！"), BagTab + 1);
+			return false;
+		}
+	}
+
+	// 目标页必须有空位（先查再动，失败不破坏任何数据）
+	const int32 EmptySlot = FindEmptySlotInTab(ToTab);
+	if (EmptySlot == INDEX_NONE)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[背包] 第 %d 页满了，卸下的背包放不进去！"), ToTab + 1);
+		return false;
+	}
+
+	const FEOBItemInstance Bag = Source.Bag;
+	Source.Bag = FEOBItemInstance();
+	Source.Slots.Empty();
+	Tabs[ToTab].Slots[EmptySlot] = Bag;
+
+	OnInventoryChanged.Broadcast();
+	UE_LOG(LogTemp, Log, TEXT("[背包] 已把第 %d 个栏位的背包卸到第 %d 页第 %d 格"),
+	       BagTab + 1, ToTab + 1, EmptySlot + 1);
 	return true;
 }
 
