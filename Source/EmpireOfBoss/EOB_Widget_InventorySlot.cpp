@@ -22,7 +22,9 @@ void UEOB_Widget_InventorySlot::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// C++ 自动绑定左键点击，蓝图不用再连 OnClicked
+	// C++ 自动绑定左键点击，蓝图不用再连 OnClicked。
+	// 注意：背包格/包裹栏位的左键按下已在预览阶段被吞掉（见 NativeOnPreviewMouseButtonDown），
+	// Button 收不到按下、OnClicked 不会触发——这条绑定现在只服务装备格（点击卸下，过渡方案）。
 	if (Button)
 	{
 		Button->OnClicked.AddDynamic(this, &UEOB_Widget_InventorySlot::OnSlotClicked);
@@ -132,31 +134,29 @@ void UEOB_Widget_InventorySlot::OnSlotClicked()
 {
 	if (!RefInventory.IsValid()) return;
 
-	// 装备格：手上拿着东西时不动作；否则保留"点击卸下"作为过渡（装备面板抓取在下一阶段做）
+	// 装备格：手上拿着东西时不动作；否则保留"点击卸下"作为过渡（装备面板抓取在下一阶段做）。
+	// 背包格/包裹栏位的左键已在预览阶段被吞掉，Button 不会触发 OnClicked，走不到这里。
 	if (Mode == EEOBSlotWidgetMode::Equipment)
 	{
 		if (RefPanel.IsValid() && RefPanel->IsHoldingItem()) return;
 		RefInventory->UnequipItem(EquipSlot);
 		return;
 	}
-
-	// 背包格 / 包裹栏位：原地点击 = 抓取手势的"拿起 / 放下"，统一交给面板的状态机
-	if (RefPanel.IsValid())
-	{
-		RefPanel->OnSlotGrabClicked(this);
-	}
 }
 
 FReply UEOB_Widget_InventorySlot::NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry,
                                                                  const FPointerEvent& InMouseEvent)
 {
-	// 左键按下：向面板登记"拖拽起点"。面板在 Tick 里检测位移超过阈值就进入拖拽。
-	// 注意这里只是登记，不吞事件——原地松开时 Button 的 OnClicked 照常触发（= 抓取）。
+	// 左键按下（背包格/包裹栏位）：登记拖拽起点，并【直接吞掉事件】——
+	// 不让 Button 收到这次按下，Slate 就不会捕获鼠标，
+	// PC->GetMousePosition 在拖拽全程保持实时（跟手图标就靠这个唯一真值源，零坐标换算）。
+	// 原地松开的"点击"语义由面板 Tick 在松开时补发 OnSlotGrabClicked，功能不变。
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton
 		&& RefPanel.IsValid()
 		&& Mode != EEOBSlotWidgetMode::Equipment)
 	{
 		RefPanel->NotifySlotLeftPressed(this, InMouseEvent.GetScreenSpacePosition());
+		return FReply::Handled();
 	}
 
 	return Super::NativeOnPreviewMouseButtonDown(InGeometry, InMouseEvent);

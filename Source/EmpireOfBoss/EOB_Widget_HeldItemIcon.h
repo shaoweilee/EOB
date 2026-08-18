@@ -20,16 +20,10 @@ class USizeBox;
  * 自己 Tick 跟随鼠标（图标中心对准光标）；HitTestInvisible，绝不挡点击。
  * 由背包面板（EOB_Widget_Inventory）运行时创建并加到视口最高层。
  *
- * 跟随原理（编辑器内嵌视口 / 独立窗口 / 任意 DPI、任意缩放叠加都自适应）：
- *  - 左键松开（抓取、无捕获）：PC->GetMousePosition 是实时真值，直接定位，零误差；
- *  - 左键按住（拖拽、被按钮捕获，PC 坐标冻结）：用【自身几何体】把
- *    FSlateApplication 的实时光标（桌面坐标，不冻结）换算成图标本地坐标，
- *    与图标中心 (IconSize/2) 的差值就是本帧该补的位移：
- *        新位置 = 旧位置 + (光标本地坐标 - 中心)
- *    每帧代数精确收敛到光标，几何体即使滞后一帧也会被修正量自动抵消，
- *    不需要锚点 / 比例 / 校准偏移，也没有任何累积误差。
- *    （面板的红框高亮在拖拽中同样依赖"控件几何体 ↔ GetCursorPos"的换算且一直正确，
- *      证明这条换算在内嵌 PIE 里可靠；不可靠的只有 GetViewportWidgetGeometry。）
+ * 跟随原理（终极简版，内嵌 PIE / 独立窗口 / 任意 DPI 都无关）：
+ * 格子在预览阶段吞掉左键按下，Button 不再捕获鼠标，因此
+ * PC->GetMousePosition 在【抓取和拖拽全程】都是实时真值——
+ * 本控件每帧直接用它定位，没有任何坐标换算，自然没有任何缩放/窗口模式的坑。
  */
 UCLASS()
 class EMPIREOFBOSS_API UEOB_Widget_HeldItemIcon : public UUserWidget
@@ -59,15 +53,9 @@ private:
 	/** 图标边长（像素），ShowIcon 时更新 */
 	float IconSize = 64.f;
 
-	/** 上一次设置的位置（拖拽路径里用"旧位置 + 修正量"推算新位置） */
-	FVector2D LastSetPos = FVector2D::ZeroVector;
-
 	/** 诊断用：Tick 里只打一次日志 */
 	bool bLoggedFirstTick = false;
 
-	/** 诊断用：每次 ShowIcon 后，拖拽路径只打一次修正量日志 */
-	bool bLoggedDragSync = false;
-
-	/** 每帧定位：松键用 PC 真值；按键用自身几何体修正 */
+	/** 每帧定位：PC 鼠标位置是唯一真值源（捕获已被格子禁用，拖拽中也是实时的） */
 	void SyncPositionToCursor();
 };

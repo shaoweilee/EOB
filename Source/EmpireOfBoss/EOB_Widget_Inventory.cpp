@@ -151,16 +151,31 @@ void UEOB_Widget_Inventory::NativeTick(const FGeometry& MyGeometry, float InDelt
 		}
 	}
 
-	// 松开左键：拖拽的落点结算（原地点击不走这里，由格子的 OnClicked 走抓取逻辑）
+	// 松开左键：结算本次按下。
+	// 注意：格子的左键按下已在预览阶段被吞掉（Button 不捕获鼠标、也不会触发 OnClicked），
+	// 所以"原地点击 = 抓取手势的拿起/放下"由这里补发。
 	if (!bLeftDown)
 	{
-		if (bDragging)
+		if (PotentialDragSlot.IsValid())
+		{
+			if (bDragging)
+			{
+				// 拖拽松手：对落点结算
+				bDragging = false;
+				if (IsHoldingItem())
+				{
+					ResolveDropAtScreenPosition(CursorPos);
+				}
+			}
+			else
+			{
+				// 原地松开（位移未超阈值）= 抓取手势的点击：拿起 / 放下
+				OnSlotGrabClicked(PotentialDragSlot.Get());
+			}
+		}
+		else
 		{
 			bDragging = false;
-			if (IsHoldingItem())
-			{
-				ResolveDropAtScreenPosition(CursorPos);
-			}
 		}
 		PotentialDragSlot = nullptr;
 	}
@@ -276,8 +291,6 @@ void UEOB_Widget_Inventory::NotifySlotLeftPressed(UEOB_Widget_InventorySlot* InS
 
 void UEOB_Widget_Inventory::OnSlotGrabClicked(UEOB_Widget_InventorySlot* InSlot)
 {
-	// 拖拽中松开会触发起点按钮的 OnClicked（UMG 按钮默认 DownAndUp，松手即触发），
-	// 这次"点击"必须忽略——拖拽的落点由 Tick 里的 ResolveDropAtScreenPosition 结算。
 	if (bDragging) return;
 
 	UE_LOG(LogTemp, Log, TEXT("[手持] 原地点击：模式=%d，页=%d，格=%d，当前%s"),
