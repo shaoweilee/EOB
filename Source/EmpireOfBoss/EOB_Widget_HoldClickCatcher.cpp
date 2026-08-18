@@ -48,3 +48,25 @@ FReply UEOB_Widget_HoldClickCatcher::NativeOnMouseButtonDown(const FGeometry& In
 	// 手持期间屏蔽其余按键对世界的穿透
 	return FReply::Handled();
 }
+
+FReply UEOB_Widget_HoldClickCatcher::NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry,
+                                                                    const FPointerEvent& InMouseEvent)
+{
+	// 双击的第二下走这里而不是 NativeOnMouseButtonDown：和单击同等对待，并吞掉事件防止穿透到世界
+	if (RefPanel.IsValid())
+	{
+		if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
+		{
+			RefPanel->CancelHeldItem();
+			return FReply::Handled();
+		}
+
+		if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+		{
+			RefPanel->NotifyWorldLeftClickWhileHolding(InMouseEvent.GetScreenSpacePosition());
+			return FReply::Handled();
+		}
+	}
+
+	return FReply::Handled();
+}

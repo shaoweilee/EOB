@@ -13,11 +13,11 @@
 
 TWeakObjectPtr<UEOB_Widget_Inventory> UEOB_Widget_Inventory::Instance = nullptr;
 
-TArray<TWeakObjectPtr<UUserWidget>>& UEOB_Widget_Inventory::GetAllPanelWidgets()
+TArray<TWeakObjectPtr<UWidget>>& UEOB_Widget_Inventory::GetAllPanelBoundsWidgets()
 {
-	/** 所有"会挡住丢弃判定"的面板（装备面板等，构造时自行登记） */
-	static TArray<TWeakObjectPtr<UUserWidget>> GAllPanelWidgets;
-	return GAllPanelWidgets;
+	/** 所有"代表面板范围"的控件（各面板的底图/外框，构造时自行登记） */
+	static TArray<TWeakObjectPtr<UWidget>> GAllPanelBoundsWidgets;
+	return GAllPanelBoundsWidgets;
 }
 
 void UEOB_Widget_Inventory::NativeConstruct()
@@ -752,15 +752,25 @@ int32 UEOB_Widget_Inventory::FindTabIndexAtScreenPosition(const FVector2D& Scree
 
 bool UEOB_Widget_Inventory::IsScreenPositionOverAnyPanel(const FVector2D& ScreenPos) const
 {
-	if (GetCachedGeometry().IsUnderLocation(ScreenPos)) return true;
-
-	for (const TWeakObjectPtr<UUserWidget>& PanelPtr : GetAllPanelWidgets())
+	if (GetCachedGeometry().IsUnderLocation(ScreenPos))
 	{
-		UUserWidget* Panel = PanelPtr.Get();
-		if (!Panel || Panel == this) continue;
-		const ESlateVisibility Vis = Panel->GetVisibility();
+		UE_LOG(LogTemp, Verbose, TEXT("[手持] 落点在本背包面板范围内（含空隙）"));
+		return true;
+	}
+
+	for (const TWeakObjectPtr<UWidget>& BoundsPtr : GetAllPanelBoundsWidgets())
+	{
+		UWidget* BoundsWidget = BoundsPtr.Get();
+		if (!BoundsWidget) continue;
+		const ESlateVisibility Vis = BoundsWidget->GetVisibility();
 		if (Vis == ESlateVisibility::Collapsed || Vis == ESlateVisibility::Hidden) continue;
-		if (Panel->GetCachedGeometry().IsUnderLocation(ScreenPos)) return true;
+		if (BoundsWidget->GetCachedGeometry().IsUnderLocation(ScreenPos))
+		{
+			// 丢弃被拦截时会打出是谁拦的：如果这里打出的控件尺寸明显超出面板边框，就是它挡错了
+			UE_LOG(LogTemp, Log, TEXT("[手持] 落点在面板范围控件【%s】内，按“面板空隙=无反应”处理"),
+			       *BoundsWidget->GetName());
+			return true;
+		}
 	}
 	return false;
 }
@@ -891,7 +901,7 @@ void UEOB_Widget_Inventory::NotifyWorldLeftClickWhileHolding(const FVector2D& Sc
 {
 	if (!IsHoldingItem() || !RefInventory) return;
 
-	// 落在本面板或任何已登记面板的空隙上 = 无反应（只有真正的"面板外空地"才丢弃）
+	// 落在本面板或任何已登记面板的范围控件内 = 无反应（只有真正的"面板外空地"才丢弃）
 	if (IsScreenPositionOverAnyPanel(ScreenPos)) return;
 
 	if (HeldSource == EEOBHeldSourceType::InventorySlot)
@@ -900,6 +910,7 @@ void UEOB_Widget_Inventory::NotifyWorldLeftClickWhileHolding(const FVector2D& Sc
 		if (RefInventory->GetItemAt(HeldTab, HeldSlot, Item) && Item.IsValid()
 			&& RefInventory->DropItemToWorld(HeldTab, HeldSlot))
 		{
+			UE_LOG(LogTemp, Log, TEXT("[手持] 面板外空地点击：已丢弃背包格来源的物品"));
 			ClearHeldItem(false);
 		}
 	}
@@ -907,6 +918,7 @@ void UEOB_Widget_Inventory::NotifyWorldLeftClickWhileHolding(const FVector2D& Sc
 	{
 		if (RefInventory->DropInstanceToWorld(HeldEquipmentItem))
 		{
+			UE_LOG(LogTemp, Log, TEXT("[手持] 面板外空地点击：已丢弃装备来源的物品"));
 			ClearHeldItem(false);
 		}
 	}

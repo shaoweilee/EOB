@@ -76,10 +76,11 @@ public:
 	static UEOB_Widget_Inventory* GetInstance() { return Instance.Get(); }
 
 	/**
-	 * 所有"会挡住丢弃判定"的面板（装备面板等，构造时自行登记）。
-	 * 手持物拖/点到这些面板的空隙上 = 无反应，不会误丢到地上。
+	 * 所有"代表面板范围"的控件（各面板的底图/外框，构造时自行登记）。
+	 * 手持物落在这些控件的几何范围内（含面板空隙）= 不触发丢弃，按取消/无反应处理。
+	 * 注意：登记的一定要是"真正贴着面板边框"的那个控件，别用可能铺满全屏的根节点。
 	 */
-	static TArray<TWeakObjectPtr<UUserWidget>>& GetAllPanelWidgets();
+	static TArray<TWeakObjectPtr<UWidget>>& GetAllPanelBoundsWidgets();
 
 protected:
 	/** 左侧页签用的控件蓝图（父类应为 EOB_Widget_InventoryTab，例如 WBP_InventoryTab_Left） */
@@ -208,7 +209,7 @@ private:
 	/** 查找屏幕坐标下的页签下标（页签按钮整体，不含已先行命中的包裹栏位格子）；找不到返回 INDEX_NONE */
 	int32 FindTabIndexAtScreenPosition(const FVector2D& ScreenPos) const;
 
-	/** 该屏幕坐标是否落在"本面板或任一已登记面板"的范围内（含空隙；用于丢弃判定） */
+	/** 该屏幕坐标是否落在"本面板或任一已登记面板范围控件"内（含空隙；用于丢弃判定，命中时会打日志） */
 	bool IsScreenPositionOverAnyPanel(const FVector2D& ScreenPos) const;
 
 	/** 每帧刷新"禁止投放"红框：手持时，鼠标下不接受当前物品的格子染红（含装备面板格子） */

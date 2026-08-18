@@ -18,8 +18,21 @@ void UEOB_Widget_EquipmentPanel::NativeConstruct()
 		}
 	}
 
-	// 登记为"会挡住丢弃判定"的面板：手持物落在本面板的空隙上 = 无反应，不会误丢到地上
-	UEOB_Widget_Inventory::GetAllPanelWidgets().AddUnique(this);
+	// 登记"面板范围"：手持物落在这个范围内 = 面板空隙 = 无反应，不会误丢到地上。
+	// 优先用可选绑定的 PanelBounds（底图/外框）；没绑就用根控件——
+	// 根控件若铺满整张设计画布，几何范围就是全屏，丢弃判定会失灵（日志会提醒）。
+	UWidget* BoundsWidget = PanelBounds ? ToRawPtr(PanelBounds) : GetRootWidget();
+	if (BoundsWidget)
+	{
+		RegisteredBounds = BoundsWidget;
+		UEOB_Widget_Inventory::GetAllPanelBoundsWidgets().AddUnique(BoundsWidget);
+		if (!PanelBounds)
+		{
+			UE_LOG(LogTemp, Warning,
+			       TEXT("[装备 UI] WBP_EquipmentPanel 未绑定 PanelBounds：面板空隙判定将使用根控件大小。"
+				       "若根控件是全屏，请把包住面板的底图/外框命名为 PanelBounds 并勾选“是变量”。"));
+		}
+	}
 
 	// 给蓝图上手动摆好的 10 个格子分发各自的槽位身份 + 手势总管。
 	// 注意：如果本面板先于背包面板构造，GetInstance() 会拿到空——没关系，
@@ -42,11 +55,13 @@ void UEOB_Widget_EquipmentPanel::NativeConstruct()
 
 void UEOB_Widget_EquipmentPanel::NativeDestruct()
 {
-	UEOB_Widget_Inventory::GetAllPanelWidgets().RemoveAll(
-		[this](const TWeakObjectPtr<UUserWidget>& Ptr)
+	const UWidget* MyBounds = RegisteredBounds.Get();
+	UEOB_Widget_Inventory::GetAllPanelBoundsWidgets().RemoveAll(
+		[MyBounds](const TWeakObjectPtr<UWidget>& Ptr)
 		{
-			return !Ptr.IsValid() || Ptr.Get() == this;
+			return !Ptr.IsValid() || Ptr.Get() == MyBounds;
 		});
+	RegisteredBounds = nullptr;
 
 	Super::NativeDestruct();
 }
