@@ -144,6 +144,24 @@ void UEOB_Widget_Inventory::NativeConstruct()
 		UE_LOG(LogTemp, Error, TEXT("[手持] 点击捕捉层创建失败！手持时点面板外将无法丢弃。"));
 	}
 
+	// ── 登记本面板的"可见范围控件"：丢弃判定只认各面板登记的范围 ──
+	// 绝不拿根控件几何做判断——根画布通常铺满全屏，会把整个屏幕误判成"面板内"导致永远丢不掉。
+	// 请在 WBP_Inventory 里把包裹"背景+格子"的子画布命名为 PanelBounds 并勾"是变量"。
+	{
+		UWidget* BoundsWidget = PanelBounds ? ToRawPtr(PanelBounds) : GetRootWidget();
+		RegisteredBounds = BoundsWidget;
+		if (BoundsWidget)
+		{
+			GetAllPanelBoundsWidgets().AddUnique(BoundsWidget);
+		}
+		if (!PanelBounds)
+		{
+			UE_LOG(LogTemp, Warning,
+			       TEXT("[手持] WBP_Inventory 未绑定 PanelBounds：丢弃判定退回根控件。根画布通常铺满全屏，"
+				       "会导致面板外丢弃被误判成面板内。请把包裹背景与格子的子画布命名为 PanelBounds 并勾选「是变量」。"));
+		}
+	}
+
 	RefreshUI();
 }
 
@@ -173,6 +191,17 @@ void UEOB_Widget_Inventory::NativeDestruct()
 	{
 		ClickCatcher->RemoveFromParent();
 		ClickCatcher = nullptr;
+	}
+
+	// 从全局"面板范围"注册表注销本面板
+	{
+		const UWidget* MyBounds = RegisteredBounds.Get();
+		GetAllPanelBoundsWidgets().RemoveAll(
+			[MyBounds](const TWeakObjectPtr<UWidget>& Ptr)
+			{
+				return !Ptr.IsValid() || Ptr.Get() == MyBounds;
+			});
+		RegisteredBounds = nullptr;
 	}
 	Super::NativeDestruct();
 }
@@ -752,12 +781,9 @@ int32 UEOB_Widget_Inventory::FindTabIndexAtScreenPosition(const FVector2D& Scree
 
 bool UEOB_Widget_Inventory::IsScreenPositionOverAnyPanel(const FVector2D& ScreenPos) const
 {
-	if (GetCachedGeometry().IsUnderLocation(ScreenPos))
-	{
-		UE_LOG(LogTemp, Verbose, TEXT("[手持] 落点在本背包面板范围内（含空隙）"));
-		return true;
-	}
-
+	// 只认各面板登记的"可见范围控件"（本面板与装备面板都在各自 NativeConstruct 里登记）。
+	// 绝不拿任何面板的根控件几何做判断——根画布通常铺满全屏，
+	// 会把整个屏幕误判成"面板内"，导致面板外丢弃永远被否决（之前就是这里卡住的）。
 	for (const TWeakObjectPtr<UWidget>& BoundsPtr : GetAllPanelBoundsWidgets())
 	{
 		UWidget* BoundsWidget = BoundsPtr.Get();
@@ -1007,4 +1033,25 @@ void UEOB_Widget_Inventory::ClearHeldItem(bool bRestoreSourceVisual)
 	{
 		ClickCatcher->SetVisibility(ESlateVisibility::Collapsed);
 	}
+}
+
+// ===================== 面板空隙兜底拦截 =====================
+
+FReply UEOB_Widget_Inventory::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// 子控件（格子/页签按钮/下拉菜单）处理过的点击不会冒泡到这里；
+	// 能到这里说明落点是"面板空隙"：一律吞掉，防止穿透到游戏世界让角色移动。
+	// 右键 = 取消手持（装备穿回原始槽位；背包/包裹来源恢复源格显示）。
+	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton && IsHoldingItem())
+	{
+		CancelHeldItem();
+	}
+	return FReply::Handled();
+}
+
+FReply UEOB_Widget_Inventory::NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry,
+                                                             const FPointerEvent& InMouseEvent)
+{
+	// 快速连点的第二次按下走这里，同样吞掉（逻辑与单击一致）
+	return NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }

@@ -3,6 +3,7 @@
 #include "EOB_Widget_Inventory.h"
 #include "EOB_Widget_InventorySlot.h"
 #include "EmpireOfBossCharacter.h"
+#include "InputCoreTypes.h"
 
 void UEOB_Widget_EquipmentPanel::NativeConstruct()
 {
@@ -93,4 +94,31 @@ void UEOB_Widget_EquipmentPanel::RefreshEquip()
 	UpdateOneSlot(Slot_Amulet, EEOBEquipSlot::Amulet);
 	UpdateOneSlot(Slot_RingLeft, EEOBEquipSlot::RingLeft);
 	UpdateOneSlot(Slot_RingRight, EEOBEquipSlot::RingRight);
+}
+
+// ===================== 面板空隙兜底拦截 =====================
+
+FReply UEOB_Widget_EquipmentPanel::NativeOnMouseButtonDown(const FGeometry& InGeometry,
+                                                           const FPointerEvent& InMouseEvent)
+{
+	// 装备格处理过的点击不会冒泡到这里；能到这里说明落点是"面板空隙"：
+	// 一律吞掉，防止穿透到游戏世界让角色移动。右键 = 取消手持（装备穿回原始槽位）。
+	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
+	{
+		if (UEOB_Widget_Inventory* Hub = UEOB_Widget_Inventory::GetInstance())
+		{
+			if (Hub->IsHoldingItem())
+			{
+				Hub->CancelHeldItem();
+			}
+		}
+	}
+	return FReply::Handled();
+}
+
+FReply UEOB_Widget_EquipmentPanel::NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry,
+                                                                  const FPointerEvent& InMouseEvent)
+{
+	// 快速连点的第二次按下走这里，同样吞掉
+	return NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }

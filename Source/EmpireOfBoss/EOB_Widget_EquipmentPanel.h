@@ -35,6 +35,14 @@ protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
+	/**
+	 * 兜底吞掉"面板空隙"上的点击（装备格处理过的点击不会冒泡到这里），
+	 * 防止穿透到游戏世界让角色移动；右键 = 取消手持（装备穿回原始槽位）。
+	 */
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply
+	NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
 	/** 刷新单个格子（有装备显示装备，无装备显示空槽） */
 	void UpdateOneSlot(UEOB_Widget_InventorySlot* Widget, EEOBEquipSlot SlotId) const;
 

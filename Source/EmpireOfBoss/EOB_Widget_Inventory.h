@@ -127,6 +127,14 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UVerticalBox> VerticalBox_TabsRight;
 
+	/**
+	 * 可选：面板可见范围控件。把包裹"背景+格子"的那个子画布命名为 PanelBounds 并勾"是变量"。
+	 * 手持物丢弃判定只认各面板登记的范围控件；不绑定会退回根控件——根画布通常铺满全屏，
+	 * 会把整个屏幕误判成"面板内"导致永远丢不掉（日志会报警）。
+	 */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> PanelBounds;
+
 	/** 当前显示的背包页下标 */
 	UPROPERTY(BlueprintReadOnly, Category = "EOB|Inventory")
 	int32 CurrentTabIndex = 0;
@@ -139,6 +147,14 @@ protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+
+	/**
+	 * 兜底吞掉"面板空隙"上的点击：子控件（格子/页签按钮）处理过的点击不会冒泡到这里，
+	 * 能到这里就说明落点是空隙——返回 Handled 防止穿透到游戏世界让角色移动；右键顺便当"取消手持"。
+	 */
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply
+	NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
 private:
 	/** 当前唯一的背包面板实例（弱引用，防 GC 误留） */
@@ -184,6 +200,9 @@ private:
 	UPROPERTY()
 	TObjectPtr<UEOB_Widget_HoldClickCatcher> ClickCatcher;
 
+	/** 本面板登记进全局"面板范围"注册表的控件（NativeDestruct 时注销） */
+	TWeakObjectPtr<UWidget> RegisteredBounds;
+
 	/** 尝试从指定格子拿起物品（装备槽 = 真脱下；背包格/包裹栏位 = 懒转移 + 源格幽灵化） */
 	void TryPickUpFromSlot(UEOB_Widget_InventorySlot* InSlot);
 
@@ -209,7 +228,7 @@ private:
 	/** 查找屏幕坐标下的页签下标（页签按钮整体，不含已先行命中的包裹栏位格子）；找不到返回 INDEX_NONE */
 	int32 FindTabIndexAtScreenPosition(const FVector2D& ScreenPos) const;
 
-	/** 该屏幕坐标是否落在"本面板或任一已登记面板范围控件"内（含空隙；用于丢弃判定，命中时会打日志） */
+	/** 该屏幕坐标是否落在任一已登记的"面板范围控件"内（含空隙；用于丢弃判定，命中时打日志指名控件） */
 	bool IsScreenPositionOverAnyPanel(const FVector2D& ScreenPos) const;
 
 	/** 每帧刷新"禁止投放"红框：手持时，鼠标下不接受当前物品的格子染红（含装备面板格子） */
