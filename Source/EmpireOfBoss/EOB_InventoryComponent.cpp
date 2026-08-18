@@ -359,41 +359,77 @@ bool UEOB_InventoryComponent::EquipBagToTab(const FEOBItemInstance& Bag, int32 T
 bool UEOB_InventoryComponent::SwapBagOnTab(int32 TabIndex, int32 FromTab, int32 FromSlot)
 {
 	if (!IsValidTab(TabIndex) || !IsValidTab(FromTab)) return false;
-	FEOBInventoryTab& Tab = Tabs[TabIndex];
-	FEOBInventoryTab& SourceTab = Tabs[FromTab];
 
-	if (!Tab.Bag.IsValid()) return false; // 空栏位直接走 EquipBagToTab
-	if (!SourceTab.Slots.IsValidIndex(FromSlot) || !SourceTab.Slots[FromSlot].IsValid()) return false;
+	if (!Tabs[TabIndex].Bag.IsValid()) return false; // 空栏位直接走 EquipBagToTab
+	if (!Tabs[FromTab].Slots.IsValidIndex(FromSlot) || !Tabs[FromTab].Slots[FromSlot].IsValid()) return false;
 
-	const FEOBItemInstance NewBag = SourceTab.Slots[FromSlot];
+	const FEOBItemInstance NewBag = Tabs[FromTab].Slots[FromSlot];
 	if (NewBag.Definition->Kind != EEOBItemKind::Bag) return false;
 
 	const int32 NewCap = GetBagCapacity(NewBag.Rarity);
-	const int32 OldCap = Tab.Slots.Num();
-	if (NewCap < OldCap)
+	const int32 OldCap = Tabs[TabIndex].Slots.Num();
+
+	// 换包规则：只要"该页现有物品数"装得进新包就能换（不再要求新包容量 ≥ 旧包容量）。
+	// 同页换包（新包本来就躺在该页格子里）同样适用：新包摘下装备、旧包落回格子，物品总数不变——
+	// 所以判断时把新包自己也计入物品数，恰好等于换包后的物品数。
+	const int32 ItemCount = GetTabItemCount(TabIndex);
+	if (NewCap < ItemCount)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[背包] 新背包（%d 格）比旧背包（%d 格）小，不能替换！"), NewCap, OldCap);
+		UE_LOG(LogTemp, Warning, TEXT("[背包] 第 %d 个栏位里有 %d 件物品，新背包（%d 格）装不下，不能替换！"),
+		       TabIndex + 1, ItemCount, NewCap);
 		return false;
 	}
 
-	// 物品原样迁入新包，旧包回到新包原来所在的格子
-	const FEOBItemInstance OldBag = Tab.Bag;
-	const TArray<FEOBItemInstance> OldItems = Tab.Slots;
+	const FEOBItemInstance OldBag = Tabs[TabIndex].Bag;
 
-	Tab.Bag = NewBag;
-	Tab.Slots.SetNum(NewCap);
-	for (int32 i = 0; i < OldItems.Num(); ++i)
+	if (TabIndex == FromTab)
 	{
-		Tab.Slots[i] = OldItems[i];
+		// ── 同页换包：新包从格子里摘下装备上，旧包落回该页 ──
+		// 新容量可能更小、FromSlot 在新容量下可能不存在，统一把"剩余物品 + 旧包"紧凑摆到前面
+		TArray<FEOBItemInstance> Packed;
+		for (int32 i = 0; i < Tabs[TabIndex].Slots.Num(); ++i)
+		{
+			if (i == FromSlot) continue; // 新包自己的格子（它已被装备上）
+			if (Tabs[TabIndex].Slots[i].IsValid()) Packed.Add(Tabs[TabIndex].Slots[i]);
+		}
+		Packed.Add(OldBag);
+
+		Tabs[TabIndex].Bag = NewBag;
+		Tabs[TabIndex].Slots.SetNum(NewCap);
+		for (int32 i = 0; i < Tabs[TabIndex].Slots.Num(); ++i) Tabs[TabIndex].Slots[i] = FEOBItemInstance();
+		for (int32 i = 0; i < Packed.Num(); ++i) Tabs[TabIndex].Slots[i] = Packed[i];
+	}
+	else
+	{
+		// ── 跨页换包：物品留在该页 ──
+		if (NewCap < OldCap)
+		{
+			// 容量变小：有效物品紧凑摆到新包前 N 格（先保存再截断，避免越界写/丢物品）
+			TArray<FEOBItemInstance> Packed;
+			for (const FEOBItemInstance& It : Tabs[TabIndex].Slots)
+			{
+				if (It.IsValid()) Packed.Add(It);
+			}
+			Tabs[TabIndex].Slots.SetNum(NewCap);
+			for (int32 i = 0; i < Tabs[TabIndex].Slots.Num(); ++i) Tabs[TabIndex].Slots[i] = FEOBItemInstance();
+			for (int32 i = 0; i < Packed.Num(); ++i) Tabs[TabIndex].Slots[i] = Packed[i];
+		}
+		else
+		{
+			// 容量不降：SetNum 扩容会保留原元素，物品位置原样不动
+			Tabs[TabIndex].Slots.SetNum(NewCap);
+		}
+
+		Tabs[TabIndex].Bag = NewBag;
+		Tabs[FromTab].Slots[FromSlot] = OldBag; // 旧包回到新包原来的格子
 	}
 
-	SourceTab.Slots[FromSlot] = OldBag;
-
 	OnInventoryChanged.Broadcast();
-	UE_LOG(LogTemp, Log, TEXT("[背包] 第 %d 个栏位换包：%s（%d 格）→ %s（%d 格），物品已迁入"),
+	UE_LOG(LogTemp, Log, TEXT("[背包] 第 %d 个栏位换包：%s → %s（%d 格 → %d 格），%d 件物品已保留"),
 	       TabIndex + 1,
-	       *OldBag.Definition->ItemName.ToString(), OldCap,
-	       *NewBag.Definition->ItemName.ToString(), NewCap);
+	       *OldBag.Definition->ItemName.ToString(),
+	       *NewBag.Definition->ItemName.ToString(),
+	       OldCap, NewCap, ItemCount);
 	return true;
 }
 
@@ -537,6 +573,17 @@ int32 UEOB_InventoryComponent::GetTabCapacity(int32 TabIndex) const
 {
 	if (!IsTabActive(TabIndex)) return 0;
 	return Tabs[TabIndex].Slots.Num();
+}
+
+int32 UEOB_InventoryComponent::GetTabItemCount(int32 TabIndex) const
+{
+	if (!IsValidTab(TabIndex)) return 0;
+	int32 Count = 0;
+	for (const FEOBItemInstance& It : Tabs[TabIndex].Slots)
+	{
+		if (It.IsValid()) ++Count;
+	}
+	return Count;
 }
 
 bool UEOB_InventoryComponent::GetTabBag(int32 TabIndex, FEOBItemInstance& OutBag) const

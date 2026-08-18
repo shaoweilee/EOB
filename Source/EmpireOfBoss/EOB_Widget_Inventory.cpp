@@ -544,8 +544,21 @@ bool UEOB_Widget_Inventory::PlaceHeldOnSlot(UEOB_Widget_InventorySlot* TargetSlo
 
 		if (TargetMode == EEOBSlotWidgetMode::Inventory)
 		{
-			// 禁止把包放进它自己那一页——否则该页失去包裹变未激活，
-			// 包会被藏进一页看不见摸不着的背包里（悬停时红框已提示）。
+			// 目标格里有背包 = 换包：该页现有物品数装得进目标包才成立。
+			// 同页换包也允许——装备的包从本页栏位摘下、目标包装备上、旧包落回本页，统一由 SwapBagOnTab 处理。
+			FEOBItemInstance TargetItem;
+			if (RefInventory->GetItemAt(TargetTab, TargetSlotInTab, TargetItem) && TargetItem.IsValid()
+				&& TargetItem.Definition && TargetItem.Definition->Kind == EEOBItemKind::Bag)
+			{
+				if (RefInventory->SwapBagOnTab(HeldTab, TargetTab, TargetSlotInTab))
+				{
+					ClearHeldItem(false);
+					return true;
+				}
+				return false;
+			}
+			// 目标是空格：沿用旧规则（包内必须已清空），且不能放进它自己那一页——
+			// 否则该页失去包裹变未激活，包会被藏进一页看不见摸不着的背包里（悬停时红框已提示）。
 			if (TargetTab == HeldTab)
 			{
 				UE_LOG(LogTemp, Log, TEXT("[背包 UI] 不能把包裹放进它自己那一页。"));
@@ -866,7 +879,14 @@ bool UEOB_Widget_Inventory::WouldAcceptDrop(const UEOB_Widget_InventorySlot* Tar
 	{
 		if (HeldSource == EEOBHeldSourceType::BagSlot) return true; // 包 ↔ 包裹栏位 = 互换页签位置，总是可以
 		if (HeldSource == EEOBHeldSourceType::EquipmentSlot) return false; // 装备不能装进包裹栏位
-		return bHeldIsBag; // 背包格 → 包裹栏位：只有背包物品能放上去
+		if (!bHeldIsBag) return false; // 背包格 → 包裹栏位：只有背包物品能放上去
+		// 目标栏位已有包 = 换包：该页现有物品数必须装得进手持的新包
+		FEOBItemInstance TargetBag;
+		if (RefInventory->GetTabBag(TargetSlot->GetTabIndex(), TargetBag) && TargetBag.IsValid())
+		{
+			return GetBagCapacity(HeldItem.Rarity) >= RefInventory->GetTabItemCount(TargetSlot->GetTabIndex());
+		}
+		return true;
 	}
 
 	// 目标：背包格，来源：装备槽
@@ -885,6 +905,18 @@ bool UEOB_Widget_Inventory::WouldAcceptDrop(const UEOB_Widget_InventorySlot* Tar
 	// 目标：背包格，来源：包裹栏位（拿着的是已装备的包）
 	if (HeldSource == EEOBHeldSourceType::BagSlot)
 	{
+		// 目标格里有背包 = 换包：手持页现有物品数必须装得进目标包。同页换包也允许
+		// （新包从本页摘下装备、旧包落回本页，SwapBagOnTab 会把物品和旧包紧凑摆好）
+		FEOBItemInstance TargetItem;
+		const bool bTargetHasItem = RefInventory->GetItemAt(TargetSlot->GetTabIndex(), TargetSlot->GetSlotInTab(),
+		                                                    TargetItem)
+			&& TargetItem.IsValid();
+		if (bTargetHasItem && TargetItem.Definition && TargetItem.Definition->Kind == EEOBItemKind::Bag)
+		{
+			return GetBagCapacity(TargetItem.Rarity) >= RefInventory->GetTabItemCount(HeldTab);
+		}
+
+		// 下面是"放进空格 = 普通卸下"的旧规则：
 		// 禁止放进它自己那一页（页会失活，包被藏起来）
 		if (TargetSlot->GetTabIndex() == HeldTab) return false;
 
@@ -892,12 +924,7 @@ bool UEOB_Widget_Inventory::WouldAcceptDrop(const UEOB_Widget_InventorySlot* Tar
 		if (!IsHeldBagEmpty()) return false;
 
 		// 目标格必须为空
-		FEOBItemInstance TargetItem;
-		if (RefInventory->GetItemAt(TargetSlot->GetTabIndex(), TargetSlot->GetSlotInTab(), TargetItem)
-			&& TargetItem.IsValid())
-		{
-			return false;
-		}
+		if (bTargetHasItem) return false;
 		return true;
 	}
 

@@ -194,7 +194,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
 	bool EquipBagToTab(const FEOBItemInstance& Bag, int32 TabIndex);
 
-	/** 换包：新包容量 >= 旧包才能替换，物品原样迁入新包，旧包回到新包原来所在的格子 */
+	/**
+	 * 换包：该页现有物品数装得进新包就能替换（不再要求新包容量 >= 旧包容量）。
+	 * 跨页：物品留在该页（容量变小则紧凑前移），旧包回到新包原来所在的格子。
+	 * 同页（新包本来就躺在该页格子里）：新包摘下装备、旧包落回该页，物品统一紧凑摆放。
+	 */
 	UFUNCTION(BlueprintCallable, Category = "EOB|Inventory")
 	bool SwapBagOnTab(int32 TabIndex, int32 FromTab, int32 FromSlot);
 
@@ -229,6 +233,10 @@ public:
 	/** 该栏位的容量（未激活为 0） */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "EOB|Inventory")
 	int32 GetTabCapacity(int32 TabIndex) const;
+
+	/** 该栏位当前的实际物品数量（有效格数；未激活为 0）。换包判定用它和新包容量比 */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "EOB|Inventory")
+	int32 GetTabItemCount(int32 TabIndex) const;
 
 	/** 查询某栏位上装备的背包物品（未装备时 OutBag 为无效实例、返回 false） */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "EOB|Inventory")
