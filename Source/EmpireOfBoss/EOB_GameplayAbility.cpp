@@ -10,6 +10,12 @@
 #include "EOB_AttributeSet.h"
 #include "MyGameplayTagsLibrary.h"
 
+// 🌾 M6b：MassBattle 割草体系（范围伤害同步打进实体）
+#include "FuncLibs/MassBattleFuncLib.h"
+#include "Fragments/Damage.h"
+#include "Fragments/Debuff.h"
+#include "MassBattleStructs.h"
+
 UEOB_GameplayAbility::UEOB_GameplayAbility()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -90,7 +96,7 @@ bool UEOB_GameplayAbility::GetCursorGroundPoint(FVector& OutPoint) const
 		}
 	}
 
-	// ④ 连英雄脚下都没有导航网格（不该发生）：退回垂直下扫，取与英雄高度最接近的表面
+	// ④ 连英雄脚下都没有导航网格（不该发生）：退回垂直下扫，只认法线朝上的可行走面，取与英雄高度最接近者
 	const float RefZ = HeroLoc.Z;
 	TArray<FHitResult> Hits;
 	const FVector SkyStart(AimPoint.X, AimPoint.Y, RefZ + 5000.f);
@@ -103,16 +109,25 @@ bool UEOB_GameplayAbility::GetCursorGroundPoint(FVector& OutPoint) const
 	if (World && World->LineTraceMultiByChannel(Hits, SkyStart, SkyEnd, ECC_GameTraceChannel2, Params) && Hits.Num() >
 		0)
 	{
-		const FHitResult* Best = &Hits[0];
+		const FHitResult* Best = nullptr;
 		for (const FHitResult& H : Hits)
 		{
-			if (FMath::Abs(H.ImpactPoint.Z - RefZ) < FMath::Abs(Best->ImpactPoint.Z - RefZ))
+			// 🌟 只认法线朝上的可行走面（0.7 ≈ 45° 坡度上限），排除墙面/岩壁立面/屋檐——
+			//    垂直扫下去的射线穿到这些面时，Z 也可能恰好接近英雄，纯比高度会误选
+			if (H.ImpactNormal.Z < 0.7f) continue;
+
+			if (!Best || FMath::Abs(H.ImpactPoint.Z - RefZ) < FMath::Abs(Best->ImpactPoint.Z - RefZ))
 			{
 				Best = &H;
 			}
 		}
-		OutPoint = Best->ImpactPoint;
-		return true;
+		// 🌟 一个合格的可行走面都没有时宁可落空，交给 ⑤ 兜底（落在英雄高度的 XY 上，
+		//    也比贴到墙面或悬空石头顶上强）
+		if (Best)
+		{
+			OutPoint = Best->ImpactPoint;
+			return true;
+		}
 	}
 
 	// ⑤ 什么都探不到：用限距后的 XY，高度取英雄脚下
@@ -196,6 +211,10 @@ TArray<AActor*> UEOB_GameplayAbility::ApplyDamageFan(float Radius, float HalfAng
 
 		HitActors.Add(HitActor);
 	}
+
+	// 🌾 M6b：同范围同步结算 Mass 实体敌人（割草体系）。
+	//    注意：扇形技能对 Mass 怪暂按全圆结算（旋风斩本来就是 360°，猛击等窄扇形会略微多打），M6c 再精细到扇形。
+	ApplyDamageToMassEnemies(Avatar->GetActorLocation(), Radius, Damage);
 	return HitActors;
 }
 
@@ -234,6 +253,9 @@ TArray<AActor*> UEOB_GameplayAbility::ApplyDamageAtLocation(FVector Center, floa
 
 		HitActors.Add(HitActor);
 	}
+
+	// 🌾 M6b：同范围同步结算 Mass 实体敌人（烈焰风暴每一跳都会走到这里，群怪持续掉血）
+	ApplyDamageToMassEnemies(Center, Radius, Damage);
 	return HitActors;
 }
 
@@ -247,4 +269,27 @@ void UEOB_GameplayAbility::ApplyBuffToSelf(TSubclassOf<UGameplayEffect> BuffGE) 
 	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
 	Context.AddInstigator(Avatar, Avatar);
 	SourceASC->ApplyGameplayEffectToSelf(BuffGE.GetDefaultObject(), 1.f, Context);
+}
+
+void UEOB_GameplayAbility::ApplyDamageToMassEnemies(const FVector& Center, float Radius, float Damage) const
+{
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+	if (!Avatar) return;
+
+	FDamage_Radial MassDmg;
+	MassDmg.DmgType = EDmgType::Normal;
+	MassDmg.Damage = Damage;
+	MassDmg.PercentDmg = 0.f;
+	MassDmg.CritProbability = 0.f; // ⚠️ 暴击已在 ComputeSkillDamage 里结算进 Damage，插件侧必须为 0，否则双重暴击
+	MassDmg.DmgRadius = Radius;
+	MassDmg.bUseFalloff = false; // EOB 规则：范围内满伤，不随距离衰减
+	MassDmg.bCheckObstacle = false; // 割草不管遮挡
+	// Query 留空 = 命中所有 Mass 实体。目前场上只有敌方 Mass 实体，无误伤风险；
+	// 日后若加入友方/召唤物实体，改成 MassDmg.Query.AnyList.Add(FTeam1Tag::StaticStruct()) 即可只伤敌方。
+
+	TArray<FDmgResult> MassResults;
+	UMassBattleFuncLib::ApplyRadialDamageAndDebuff(
+		Avatar, MassResults, -1, Center,
+		FEntityArray(), FEntityHandle(), FEntityHandle(), Center,
+		MassDmg, FDebuff_Radial());
 }
