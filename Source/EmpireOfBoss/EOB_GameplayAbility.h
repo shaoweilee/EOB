@@ -9,7 +9,6 @@ class UGameplayEffect;
 /**
  * M3b：主动技能基类。所有技能都继承它。
  * 提供：面向鼠标、鼠标落点、技能伤害公式、扇形/落点伤害、自我 Buff
- * M6b：范围伤害同时打进 MassBattle 实体体系（割草怪），六个技能自动获得打群怪能力
  */
 UCLASS()
 class EMPIREOFBOSS_API UEOB_GameplayAbility : public UGameplayAbility
@@ -48,11 +47,4 @@ protected:
 
 	/** 给自己挂 Buff GE（战吼用） */
 	void ApplyBuffToSelf(TSubclassOf<UGameplayEffect> BuffGE) const;
-
-	/**
-	 * M6b：把同一份范围伤害同步打进 MassBattle 实体体系（割草怪）。
-	 * 暴击已在 EOB 侧结算进 Damage 数值，插件侧暴击率强制为 0，防止双重暴击。
-	 * 场上没有 Mass 敌人时自动空操作，开销可忽略。
-	 */
-	void ApplyDamageToMassEnemies(const FVector& Center, float Radius, float Damage) const;
 };

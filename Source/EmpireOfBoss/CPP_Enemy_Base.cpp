@@ -2,6 +2,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "EOB_AttributeSet.h"
+#include "EOB_EnemyAIController.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EOB_HUDWidget.h"
@@ -21,11 +22,20 @@ ACPP_Enemy_Base::ACPP_Enemy_Base()
 	{
 		MoveComp->bUseRVOAvoidance = true;
 		MoveComp->AvoidanceConsiderationRadius = 40.f; // 避让判定半径，与怪物的身形大小类似即可
-		MoveComp->MaxWalkSpeed = 300.f; // 顺便初始化怪物的慢速游荡/行走速度
+		MoveComp->MaxWalkSpeed = 300.f; // 旧默认行走速度（BeginPlay 里会被 ChaseSpeed 覆盖）
+
+		// 🌟 M6 重做：面朝移动方向，寻路移动时自动转身
+		MoveComp->bOrientRotationToMovement = true;
+		MoveComp->RotationRate = FRotator(0.f, 720.f, 0.f);
 	}
 
 	// 3. 为敌人打上 Tag，完美兼容你的 PlayerController 普攻左键点击过滤！
 	Tags.Add(FName("Enemy"));
+
+	// 5. M6 重做：AI 控制器——引擎自动给每只怪生成并附身。
+	//    PlacedInWorldOrSpawned = 手摆的和运行时刷出来的行为完全一致，从根上杜绝两种来源不一致
+	AIControllerClass = AEOB_EnemyAIController::StaticClass();
+	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 }
 
 void ACPP_Enemy_Base::BeginPlay()
@@ -35,6 +45,12 @@ void ACPP_Enemy_Base::BeginPlay()
 
 	// 🌟 按实例上配置的 EnemyLevel 放大生命/护甲（1 级怪不变，高级怪变沙包）
 	ApplyLevelScaling();
+
+	// 🌟 M6 重做：追击速度写进移动组件（覆盖构造函数里的 300 默认值）
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->MaxWalkSpeed = ChaseSpeed;
+	}
 
 	// 放在 BeginPlay 里，游戏跑起来的瞬间会强行洗掉蓝图的一切垃圾缓存
 	if (UCapsuleComponent* CapCollision = GetCapsuleComponent())
@@ -84,7 +100,8 @@ void ACPP_Enemy_Base::ApplyLevelScaling()
 void ACPP_Enemy_Base::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	// M1 新增：尸体不再执行任何 Tick 逻辑（未来的 AI 追敌也不会被尸体触发）
+	// M1：尸体不执行任何 Tick 逻辑
+	// M6：追击大脑在 EOB_EnemyAIController 里，这里不用管
 	if (bIsDead) return;
 }
 

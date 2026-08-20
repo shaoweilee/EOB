@@ -25,12 +25,7 @@ public class EmpireOfBoss : ModuleRules
 			"SlateCore",
 			"GameplayAbilities",
 			"GameplayTags",
-			"GameplayTasks",
-			// M6b：MassBattle 割草体系（引擎级插件，启用后直接引用其模块）
-			"MassBattle", // 刷怪/伤害/事件 API（UMassBattleFuncLib）
-			"MassAPI", // 实体句柄 FEntityHandle 等基础类型
-			"FlowFieldCanvas", // 流场 AFlowField（群怪寻路）
-			"MassEntity" // Mass 实体框架基础头文件
+			"GameplayTasks"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

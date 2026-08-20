@@ -10,12 +10,6 @@
 #include "EOB_AttributeSet.h"
 #include "MyGameplayTagsLibrary.h"
 
-// 🌾 M6b：MassBattle 割草体系（范围伤害同步打进实体）
-#include "FuncLibs/MassBattleFuncLib.h"
-#include "Fragments/Damage.h"
-#include "Fragments/Debuff.h"
-#include "MassBattleStructs.h"
-
 UEOB_GameplayAbility::UEOB_GameplayAbility()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
@@ -212,9 +206,6 @@ TArray<AActor*> UEOB_GameplayAbility::ApplyDamageFan(float Radius, float HalfAng
 		HitActors.Add(HitActor);
 	}
 
-	// 🌾 M6b：同范围同步结算 Mass 实体敌人（割草体系）。
-	//    注意：扇形技能对 Mass 怪暂按全圆结算（旋风斩本来就是 360°，猛击等窄扇形会略微多打），M6c 再精细到扇形。
-	ApplyDamageToMassEnemies(Avatar->GetActorLocation(), Radius, Damage);
 	return HitActors;
 }
 
@@ -254,8 +245,6 @@ TArray<AActor*> UEOB_GameplayAbility::ApplyDamageAtLocation(FVector Center, floa
 		HitActors.Add(HitActor);
 	}
 
-	// 🌾 M6b：同范围同步结算 Mass 实体敌人（烈焰风暴每一跳都会走到这里，群怪持续掉血）
-	ApplyDamageToMassEnemies(Center, Radius, Damage);
 	return HitActors;
 }
 
@@ -269,27 +258,4 @@ void UEOB_GameplayAbility::ApplyBuffToSelf(TSubclassOf<UGameplayEffect> BuffGE) 
 	FGameplayEffectContextHandle Context = SourceASC->MakeEffectContext();
 	Context.AddInstigator(Avatar, Avatar);
 	SourceASC->ApplyGameplayEffectToSelf(BuffGE.GetDefaultObject(), 1.f, Context);
-}
-
-void UEOB_GameplayAbility::ApplyDamageToMassEnemies(const FVector& Center, float Radius, float Damage) const
-{
-	AActor* Avatar = GetAvatarActorFromActorInfo();
-	if (!Avatar) return;
-
-	FDamage_Radial MassDmg;
-	MassDmg.DmgType = EDmgType::Normal;
-	MassDmg.Damage = Damage;
-	MassDmg.PercentDmg = 0.f;
-	MassDmg.CritProbability = 0.f; // ⚠️ 暴击已在 ComputeSkillDamage 里结算进 Damage，插件侧必须为 0，否则双重暴击
-	MassDmg.DmgRadius = Radius;
-	MassDmg.bUseFalloff = false; // EOB 规则：范围内满伤，不随距离衰减
-	MassDmg.bCheckObstacle = false; // 割草不管遮挡
-	// Query 留空 = 命中所有 Mass 实体。目前场上只有敌方 Mass 实体，无误伤风险；
-	// 日后若加入友方/召唤物实体，改成 MassDmg.Query.AnyList.Add(FTeam1Tag::StaticStruct()) 即可只伤敌方。
-
-	TArray<FDmgResult> MassResults;
-	UMassBattleFuncLib::ApplyRadialDamageAndDebuff(
-		Avatar, MassResults, -1, Center,
-		FEntityArray(), FEntityHandle(), FEntityHandle(), Center,
-		MassDmg, FDebuff_Radial());
 }

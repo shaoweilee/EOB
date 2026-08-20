@@ -69,4 +69,24 @@ public:
 
 	/** 按 EnemyLevel 放大生命/护甲（攻击力故意不放大，免得高级沙包一拳秒你） */
 	void ApplyLevelScaling();
+
+	// ===================== M6 重做：AI 追击（AIController + 导航网格） =====================
+	// 大脑在 EOB_EnemyAIController 里。构造函数已设好 AIControllerClass 和
+	// AutoPossessAI = PlacedInWorldOrSpawned，手摆的和刷出来的怪都会自动附身。
+
+	/** 是否追击主角。测试木桩/沙包在实例上勾掉它，就变回原来的挨打桩 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|AI")
+	bool bChasePlayer = true;
+
+	/** 追击移动速度（厘米/秒）。BeginPlay 里写进 MaxWalkSpeed，覆盖构造函数的默认值 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|AI")
+	float ChaseSpeed = 450.f;
+
+	/** 追到这个距离就停下贴脸（怪打人的攻击逻辑留到 M6c 再加） */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|AI")
+	float ChaseStopDistance = 150.f;
+
+	/** 警戒范围：主角比这个距离远就原地站桩不追；0 = 全图死追 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|AI")
+	float AggroRange = 4000.f;
 };
