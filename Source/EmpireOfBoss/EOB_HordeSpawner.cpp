@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
+#include "NavigationSystem.h"
 #include "TimerManager.h"
 
 AEOB_HordeSpawner::AEOB_HordeSpawner()
@@ -54,11 +55,17 @@ void AEOB_HordeSpawner::StartSpawn()
 		return;
 	}
 
+	if (bRequireNav && !UNavigationSystemV1::GetCurrent(World))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[刷怪器] %s 勾了只刷在导航上，但世界里没有导航系统！落点安检会全部失败。"), *GetName());
+	}
+
 	// 立即补第一批，之后按间隔循环
 	World->GetTimerManager().SetTimer(SpawnTimer, this, &AEOB_HordeSpawner::SpawnTick, RespawnInterval, true, 0.f);
-	UE_LOG(LogTemp, Log, TEXT("[刷怪器] %s 开刷：中心=%s，同屏上限 %d，环带 %.0f~%.0f，间隔 %.1f 秒"),
+	UE_LOG(LogTemp, Log, TEXT("[刷怪器] %s 开刷：中心=%s，同屏上限 %d，环带 %.0f~%.0f，间隔 %.1f 秒，导航安检=%s"),
 	       *GetName(), bSpawnAroundHero ? TEXT("主角") : TEXT("刷怪器自身"),
-	       MaxAlive, InnerRadius, OuterRadius, RespawnInterval);
+	       MaxAlive, InnerRadius, OuterRadius, RespawnInterval,
+	       bRequireNav ? TEXT("开") : TEXT("关"));
 }
 
 void AEOB_HordeSpawner::StopSpawn()
@@ -130,49 +137,90 @@ bool AEOB_HordeSpawner::TrySpawnOne()
 		CenterLoc = GetActorLocation();
 	}
 
-	// 环带上随机取点
-	const float AngleDeg = FMath::RandRange(0.f, 360.f);
-	const float Radius = FMath::RandRange(InnerRadius, FMath::Max(InnerRadius, OuterRadius));
-	FVector SpawnLoc = CenterLoc + FVector(
-		FMath::Cos(FMath::DegreesToRadians(AngleDeg)) * Radius,
-		FMath::Sin(FMath::DegreesToRadians(AngleDeg)) * Radius,
-		0.f);
+	// 敌人胶囊体真实尺寸（贴地抬升和占位检测都要用）
+	const ACPP_Enemy_Base* EnemyCDO = EnemyClass->GetDefaultObject<ACPP_Enemy_Base>();
+	const float CapsuleRadius = EnemyCDO->GetCapsuleComponent()->GetScaledCapsuleRadius();
+	const float CapsuleHalfHeight = EnemyCDO->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
 
-	// 垂直下扫贴地（和 SpawnLoot 同一个地面通道 GameTraceChannel2）
-	FHitResult GroundHit;
-	FCollisionQueryParams Params;
-	if (Hero)
+	// 导航系统（勾了 bRequireNav 才用）
+	UNavigationSystemV1* NavSys = bRequireNav ? UNavigationSystemV1::GetCurrent(World) : nullptr;
+	if (bRequireNav && !NavSys)
 	{
-		Params.AddIgnoredActor(Hero);
-	}
-	if (!World->LineTraceSingleByChannel(GroundHit,
-	                                     SpawnLoc + FVector(0.f, 0.f, GroundTraceUp),
-	                                     SpawnLoc - FVector(0.f, 0.f, GroundTraceDown),
-	                                     ECC_GameTraceChannel2, Params))
-	{
-		// 点在深渊/镂空上：宁可这次不刷，也绝不把怪扔进地下
-		return false;
+		return false; // StartSpawn 里已报警告，这里静默放弃
 	}
 
-	// 只认接近水平的可行走面（0.7 ≈ 45° 坡度上限），防止把怪刷在岩壁立面上
-	if (GroundHit.ImpactNormal.Z < 0.7f)
+	for (int32 Attempt = 0; Attempt < FMath::Max(1, MaxSpawnAttempts); ++Attempt)
 	{
-		return false;
+		// 环带上随机取点
+		const float AngleDeg = FMath::RandRange(0.f, 360.f);
+		const float Radius = FMath::RandRange(InnerRadius, FMath::Max(InnerRadius, OuterRadius));
+		const FVector CandidateXY = CenterLoc + FVector(
+			FMath::Cos(FMath::DegreesToRadians(AngleDeg)) * Radius,
+			FMath::Sin(FMath::DegreesToRadians(AngleDeg)) * Radius,
+			0.f);
+
+		// ① 地面安检：垂直下扫，深渊/镂空直接换点
+		FHitResult GroundHit;
+		FCollisionQueryParams TraceParams;
+		if (Hero)
+		{
+			TraceParams.AddIgnoredActor(Hero);
+		}
+		if (!World->LineTraceSingleByChannel(GroundHit,
+		                                     CandidateXY + FVector(0.f, 0.f, GroundTraceUp),
+		                                     CandidateXY - FVector(0.f, 0.f, GroundTraceDown),
+		                                     ECC_GameTraceChannel2, TraceParams))
+		{
+			continue;
+		}
+		// 陡坡/立面（0.7 ≈ 45° 上限）换点
+		if (GroundHit.ImpactNormal.Z < 0.7f)
+		{
+			continue;
+		}
+
+		FVector GroundLoc = GroundHit.ImpactPoint;
+
+		// ② 导航安检：把落点投影到导航网格上。
+		//    投不上 = 障碍内部/无导航区/石头顶，换点；投上了用导航的精确表面位置
+		if (NavSys)
+		{
+			FNavLocation NavLoc;
+			if (!NavSys->ProjectPointToNavigation(GroundLoc, NavLoc, NavSnapExtent))
+			{
+				continue;
+			}
+			GroundLoc = NavLoc.Location;
+		}
+
+		// ③ 占位安检：用怪的真实胶囊体试摆，被岩石/树干/别的怪/主角占着就换点，
+		//    绝不把怪刷进障碍物内部
+		const FVector SpawnLoc = GroundLoc + FVector(0.f, 0.f, CapsuleHalfHeight + 2.f);
+		const FCollisionShape CapsuleShape = FCollisionShape::MakeCapsule(CapsuleRadius, CapsuleHalfHeight);
+
+		FCollisionObjectQueryParams OccupyObjectTypes;
+		OccupyObjectTypes.AddObjectTypesToQuery(ECC_WorldStatic);
+		OccupyObjectTypes.AddObjectTypesToQuery(ECC_WorldDynamic);
+		OccupyObjectTypes.AddObjectTypesToQuery(ECC_Pawn);
+
+		if (World->OverlapAnyTestByObjectType(SpawnLoc, FQuat::Identity, OccupyObjectTypes, CapsuleShape))
+		{
+			continue;
+		}
+
+		// ④ 三关全过，刷！
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride =
+			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+		ACPP_Enemy_Base* NewEnemy = World->SpawnActor<ACPP_Enemy_Base>(
+			EnemyClass, SpawnLoc, FRotator::ZeroRotator, SpawnParams);
+		if (!NewEnemy) return false;
+
+		Spawned.Add(NewEnemy);
+		return true;
 	}
 
-	// 🌟 落点抬到胶囊体半高：从根上杜绝"刷出来卡进地里/掉下去"
-	const float HalfHeight = EnemyClass->GetDefaultObject<ACPP_Enemy_Base>()
-	                                   ->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-	SpawnLoc = GroundHit.ImpactPoint + FVector(0.f, 0.f, HalfHeight + 2.f);
-
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.SpawnCollisionHandlingOverride =
-		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
-	ACPP_Enemy_Base* NewEnemy = World->SpawnActor<ACPP_Enemy_Base>(
-		EnemyClass, SpawnLoc, FRotator::ZeroRotator, SpawnParams);
-	if (!NewEnemy) return false;
-
-	Spawned.Add(NewEnemy);
-	return true;
+	// 连试 MaxSpawnAttempts 个点都不合格（比如环带大部分在障碍区）：放弃这只，下个间隔再试
+	return false;
 }

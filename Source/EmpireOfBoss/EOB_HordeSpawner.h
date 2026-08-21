@@ -13,7 +13,8 @@ class USceneComponent;
  * 默认围着刷怪器自己刷怪（摆在哪儿就刷在哪儿，巢穴模式）；
  * 勾上 bSpawnAroundHero 则围着主角刷（随行压力模式）。
  * 同屏存活数由 MaxAlive 封顶；击杀掉落/经验/词缀全走敌人自身 OnDeath 管线。
- * 不需要导航网格：敌人直线追击 + RVO 避让，空旷地图天然适配。
+ * 刷怪三道安检：地面检测 → 导航吸附 → 胶囊占位检测，
+ * 保证怪只刷在"有导航、能站人、没占地"的地方。
  */
 UCLASS()
 class EMPIREOFBOSS_API AEOB_HordeSpawner : public AActor
@@ -28,7 +29,7 @@ public:
 
 	// ===================== 配置 =====================
 
-	/** 刷什么怪：选敌人蓝图子类（比如 BP_Enemy_Rat）。掉落表/等级/词缀都在蓝图默认值里配 */
+	/** 刷什么怪：选敌人蓝图子类（比如 BP_Enemy_SSL）。掉落表/等级/词缀都在蓝图默认值里配 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Horde")
 	TSubclassOf<ACPP_Enemy_Base> EnemyClass;
 
@@ -44,7 +45,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Horde")
 	float InnerRadius = 0.f;
 
-	/** 刷怪环外径：巢穴模式默认 20 米；围主角模式建议 3000 */
+	/** 刷怪环外径：巢穴模式默认 20 米；围主角模式建议 2000~3000 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Horde")
 	float OuterRadius = 2000.f;
 
@@ -71,6 +72,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Horde")
 	float GroundTraceDown = 4000.f;
 
+	// ===================== 智能落点（三道安检） =====================
+
+	/** 只刷在导航网格上：投不到导航的点直接淘汰（避开无导航区和障碍内部）。强烈推荐保持开启 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Horde|Placement")
+	bool bRequireNav = true;
+
+	/** 导航吸附范围（厘米）：落点在这个范围内有导航就吸附过去，超出就淘汰换点 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Horde|Placement")
+	FVector NavSnapExtent = FVector(80.f, 80.f, 300.f);
+
+	/** 每只怪最多尝试几个随机点：点不合格就换下一个，全部失败则等下个补怪间隔再试 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "EOB|Horde|Placement", meta = (ClampMin = "1"))
+	int32 MaxSpawnAttempts = 10;
+
 	// ===================== 手动开关（PIE 中选中本 Actor，详情面板点按钮） =====================
 
 	UFUNCTION(CallInEditor, Category = "EOB|Horde")
@@ -87,7 +102,7 @@ protected:
 	/** 补怪定时器回调：清死亡登记 → 按缺口补怪 */
 	void SpawnTick();
 
-	/** 尝试在环带随机点刷一只，返回是否成功（点在深渊/陡坡上则放弃本次） */
+	/** 尝试刷一只：最多试 MaxSpawnAttempts 个随机点，每点过三道安检，全过才刷 */
 	bool TrySpawnOne();
 
 	// ===================== 组件 =====================
